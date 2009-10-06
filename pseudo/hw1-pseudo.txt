@@ -1,0 +1,120 @@
+Hough Transform:
+--------------------------------------------------
+on the whiteboard at the moment
+
+TurnXDegreesGivenWall
+--------------------------------------------------
+this function turns X degrees by orienting itself with respect to a wall.
+Multiple walls can be used by interpolating between the results of this
+function called on more than two walls.
+
+Below are 2 walls and the robot is at ^.  
+    ______
+   /
+  /
+ /  ^
+/
+
+The robot is initially pointed straight at the __ wall.  the angle between the
+robot's forward vector and the wall is 90 degrees.  The robot will turn some
+small amount (a few degrees) with 10Hz laser scans.  now the will know:
+* the rotation of the robot to the wall originally (theta0)
+* the rotation of the robot to the wall now (thetan)
+
+subtract theta0 from thetan to determine the rotation between frames.
+
+basically just rotate the robot until some desired theta is reached.
+
+the problem now becomes determining which wall corresponds to which.  In a
+place with multiple walls, we need to determine which ones correspond.  We can
+do this using RANSAC.
+
+
+RANSAC
+--------------------------------------------------
+let's say we have a bunch of walls seen in one observation, L.  now we move
+and rotate the robot by some unknown amount and detect a set of walls in the
+next observation, M.  Given two L and M, how do we determine how the robot was
+transformed?
+
+the answer is Random Sample Consensus.  It will basically choose one wall from
+L, l*, and one wall form M, m*, and calculate the transform of the robot
+assuming they corrspond to the same wall.  We can always calculate the
+distance we have moved the robot away from the wall, and we can always
+calculate the amount of rotation experienced by the robot.  However, we cannot
+always determine the distance moved along the wall.  so it seems like it is
+appropriate if we are rotating but not if we are moving along a wale.  It
+works great for the TurnXDegreesGivenWall problem.
+
+So, given the transform calculated from l* and m*, we apply that transform to
+all other walls in L.  Now we find out which wall in M each translated wall l'
+corresponds to.  to do this compare the r and theta values for the walls and
+ensure they are within some amount.
+
+RANSAC IS OVERKILL
+--------------------------------------------------
+we might be able to just loop through each wall in L.  For each wall l in L,
+find the wall m in M that corresponds to it most closely (by comparing theta and
+R values).  Use that as the corresponding wall.
+
+LaserReadingtoXY
+--------------------------------------------------
+Given an array of laser readings
+[ 5 5 5.2 ... 1.2 1.3]
+we know that the left-most corresponds to 90 degrees counterclockwise from the
+front vector of the robot, and the right-most corresponds to 90 degrees
+clockwise from the front vector of the robot.
+
+Therefore we can convert from the index position i within the array and the
+total number of laser readings in the array to an angle:
+
+def laserReadingAngle(i, reading):
+   num_scan_points = len(reading)
+   if num_scan_points > 0:
+      return (1.0 - float(i) / float(num_scan_points)) * math.pi
+   else:
+      return 0 #degenerate
+
+# theta is in radians, and r is in whatever.  positive theta 
+def polarToCartesian(r, theta):
+   x = r * math.cos(theta)
+   y = r * math.sin(theta)
+   return [x, y]
+
+
+# given some points, randomly chooses num_points_necessary_for_fit 500 or so
+# times.  At each iteration model_callback is called taking as an argument a
+# list of num_points_necessary_for_fit points with which it generates a black box
+# model object.  when model is passed into inlierp_callback along with a
+# candidate point, inlierp_callback will return true if the given model
+# yielded an inlier when the point was transformed by the model.
+# returns the following values in an array:
+# 1. the best model.
+# 2. the inliers on that model
+import random
+def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callback):
+    best_model = None
+    best_inliers = []
+    mutable_points = points[:]
+    def random_partition:
+        random.shuffle(mutable_points)
+        return [ mutable_points[:num_points_necessary_for_fit], mutable_points[num_points_necessary_for_fit:]]
+        
+    for iteration in xrange(0, 500):
+        [fit_points, test_points] = random_partition()
+        model = model_callback(fit_points)
+        inliers = filter(lambda test_point : inlier_callback(test_point), test_points)
+        if (not best_model) or len(inliers) > len(best_inliers):
+           best_model = model
+           best_inliers = inliers
+
+     return [best_model, best_inliers]
+
+
+Example usage of RANSAC:
+
+using ransac to fit a bunch of points into a line works like this
+
+def line_model(two_points):
+    [p1, p2] = two_points
+    
