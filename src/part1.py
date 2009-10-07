@@ -138,6 +138,7 @@ class Commands:
     self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
     self.stage = 1
   def send(self):
+'''    
     xVel = 0
     thetaVel = 0
     if self.stage == 1:  # haven't gone forward enough
@@ -158,6 +159,8 @@ class Commands:
         self.stage += 1
     twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
     self.velPublish.publish(twist)
+'''
+    
 
 localMap = LocalMap() # the map object
 rp = RobotPosition() # global RobotPosition object
