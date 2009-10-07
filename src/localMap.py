@@ -34,27 +34,34 @@ class LocalMap:
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
 
-  def wallIndex(self, w):
-    for wall in self.walls:
-      angle = wall.angleBetween(w)
-      if (angle < self.maxAngleDiff or math.pi - angle < self.maxAngleDiff) and wall.distanceToPoint(w.origin()) < self.maxDistDiff:
+  def wallIndex(self, w):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
+    minAngle = self.maxAngleDiff  # make sure we have at most this much angle diff
+    minDist = self.maxDistDiff  # at most this much distance diff
+    retval = -1  # retval of -1 means no match
+    for wall in self.walls:  # iterate over all the walls
+      angle = wall.angleBetween(w)  # calculate the difference angle
+      if angle > math.pi - self.maxAngleDiff:  # close to pi is the same as close to 0
+        angle = math.pi - angle  # flip the angle
+      if angle < minAngle and wall.distanceToPoint(w.origin()) < minDist:  # smallest differences yet
         # check for any separation between the new wall and the old one
         if not (w.leftmost > wall.rightmost or w.rightmost < wall.leftmost or w.bottommost > wall.topmost or w.topmost < wall.bottommost):
-          if w.leftmost < wall.leftmost:
-            wall.leftmost = w.lefmost
-          if w.rightmost > wall.rightmost:
-            wall.rightmost = w.rightmost
-          if w.bottommost < wall.bottommost:
-            wall.bottommost = w.bottommost
-          if w.topmost > wall.topmost:
-            wall.topmost = w.topmost
-          return self.walls.index(wall)
-    return -1
+          minAngle = angle  # update the minAngle so we have to do better to overwrite this
+          retval = self.walls.index(wall)
+    if retval >= 0:  # if we found a match, update extremes
+      if w.leftmost < self.walls[retval].leftmost:
+        self.walls[retval].leftmost = w.lefmost
+      if w.rightmost > self.walls[retval].rightmost:
+        self.walls[retval].rightmost = w.rightmost
+      if w.bottommost < self.walls[retval].bottommost:
+        self.walls[retval].bottommost = w.bottommost
+      if w.topmost > self.walls[retval].topmost:
+        self.walls[retval].topmost = w.topmost
+    return retval
 
-  def isRectilinear(self, w):
+  def isRectilinear(self, w):  # takes in a new wall, makes sure it sits at either 90 or 180 degrees to other walls
     if len(self.walls) == 0:
       return True
-    angleTests = [0, math.pi/2.0, math.pi, 3.0*math.pi/2.0, 2*math.pi]
+    angleTests = [0, math.pi/2.0, math.pi, 3.0*math.pi/2.0, 2*math.pi]  # test at all 90 degree intervals
     for wall in self.walls:
       a = wall.angleBetween(w)
       for test in angleTests:
