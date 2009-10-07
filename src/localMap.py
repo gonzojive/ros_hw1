@@ -46,9 +46,7 @@ class LocalMap:
       return None
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
-      distance = self.walls[i].distanceToPoint([extremes[1]-extremes[0],extremes[3]-extremes[2]])
-      return (angle, distance)
-        
+      return angle
 
   def wallIndex(self, w):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
     minAngle = self.maxAngleDiff  # make sure we have at most this much angle diff

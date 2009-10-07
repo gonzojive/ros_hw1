@@ -32,8 +32,9 @@ def laserReadingAngle(i, readingRanges):
     return 0 #degenerate
 
 def laserReadingToCartesianPoints(reading, position):
-  local = map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)+position.rot), reading.ranges, xrange(0, len(reading.ranges)))
-  return [[p[0]-position.trans[0],p[1]-position.trans[1]] for p in local]
+  pos = position.position()
+  local = map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)+pos[1]), reading.ranges, xrange(0, len(reading.ranges)))
+  return [[p[0]-pos[0][0],p[1]-pos[0][1]] for p in local]
 
 class LaserInterpreter:
   def __init__(self, p, m): # constructor
@@ -78,7 +79,8 @@ class LaserInterpreter:
     rospy.loginfo("Printing %d walls." % len(localMap.walls))
     for w in self.localMap.walls:
       [begin, end] = w.segment()
-    self.mapviz.vizSegment(begin, end)
+#      self.mapviz.vizSegment(begin, end)
+      rospy.loginfo("Wall: (%0.2f, %0.2f) to (%0.2f, %0.2f)", begin[0], begin[1], end[0], end[1])
       
 #    self.logReadingInfo(reading)
 
@@ -89,16 +91,16 @@ class LaserInterpreter:
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading, self.position)
     [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
-    self.mapviz.vizPoints(inliers)
+#    self.mapviz.vizPoints(inliers)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
     rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
-    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
-    ret = self.localMap.wallIs(bestLine, extremes)
-    if ret != None:
-      position.laserOdom(ret)
+#    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
+    angleDiff = self.localMap.wallIs(bestLine, extremes)
+    if angleDiff != None:
+      self.position.addMapRotationOffset(angleDiff)
 
 
 class RobotPosition:
@@ -119,6 +121,8 @@ class RobotPosition:
     self.mapTrans = mapT  # assume map tranlation and rotation are base truth
     self.mapRot = mapR
     self.resetOdom(self.odomTrans, self.odomRot)  # set odometry offsets back to 0
+  def addMapRotationOffset(self, offset):  # just offset the current reading
+    self.mapRot += offset
   def position(self):  # returns the most recent map position + any more recent odometry offsets
     return [[self.mapTrans[0]+self.odomTrans[0], self.mapTrans[1]+self.odomTrans[1]], self.mapRot+self.odomRot]
 #    self.logPosInfo()
