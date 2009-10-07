@@ -4,6 +4,7 @@ import rospy
 import tf
 from math import *
 from ransac import *
+from localMap import *
 # import cv	# doesn't recognize cv
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
@@ -29,11 +30,14 @@ def laserReadingAngle(i, readingRanges):
   else:
     return 0 #degenerate
 
-def laserReadingToCartesianPoints(reading):
-  return map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)), reading.ranges, xrange(0, len(reading.ranges)))
+def laserReadingToCartesianPoints(reading, position):
+  local = map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)+position.rot), reading.ranges, xrange(0, len(reading.ranges)))
+  return [[p[0]-position.trans[0],p[1]-position.trans[1]] for p in local]
 
 class LaserInterpreter:
-  def __init__(self): # constructor
+  def __init__(self, p, m): # constructor
+    self.localMap = m
+    self.position = p
     self.readings = []
     self.maxReadings = 10
     self.R = 100  # number of subdivisions of radius
@@ -74,14 +78,15 @@ class LaserInterpreter:
     print reading.ranges[-1], reading.ranges[len(reading.ranges)/2], reading.ranges[0]
 
   def ransac(self, reading):
-    cartesianPoints = laserReadingToCartesianPoints(reading)
-    [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
+    cartesianPoints = laserReadingToCartesianPoints(reading, self.position)
+    [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
     rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
     rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
+    self.localMap.wallIs(bestLine, extremes)
 
 class RobotPosition:
   def __init__(self):
@@ -99,15 +104,6 @@ class RobotPosition:
 #    self.logPosInfo()
   def logPosInfo(self):
     rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
-
-#class Wall:
-#  def __init__(self, 
-
-#class RotateWithLaserReadings:
-#  def __init(self):
-#    self.lastFrameWalls = []
-
-#def rotateRobot
     
 
 class Commands:
@@ -139,8 +135,10 @@ class Commands:
     twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
     self.velPublish.publish(twist)
 
-li = LaserInterpreter()	# global LaserInterpreter object
+localMap = LocalMap() # the map object
 rp = RobotPosition() # global RobotPosition object
+li = LaserInterpreter(rp, localMap)	# global LaserInterpreter object
+
 
 def callback(reading):
   li.laserReadingNew(reading)

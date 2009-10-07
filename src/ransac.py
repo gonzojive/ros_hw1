@@ -26,7 +26,18 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
            best_model = model
            best_inliers = inliers
     
-    return [best_model, best_inliers]
+    left = right = best_inliers[0][0]
+    bottom = top = best_inliers[0][1]
+    for pt in best_inliers:
+      if pt[0] < left:
+        left = pt[0]
+      if pt[0] > right:
+        right = pt[0]
+      if pt[1] < bottom:
+        bottom = pt[1]
+      if pt[1] > top:
+        top = pt[1]
+    return [best_model, best_inliers, [left, right, bottom, top]]
 
 # RANSAC for fitting 2d/3d lines to a point cloud
 
