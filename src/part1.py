@@ -103,17 +103,24 @@ class LaserInterpreter:
 
 class RobotPosition:
   def __init__(self):
-    self.initialized = False
-    self.trans = [0,0]
-    self.rot = 0
-  def initialPos(self, t, r):
-    self.trans0 = t
-    self.rot0 = r[2]
-#    rospy.loginfo("%0.2f, %0.2f, %0.2f", self.trans0[0], self.trans0[1], self.rot0)
-  def positionNew(self, t, r):
-    self.trans[0] = t[0] - self.trans0[0]
-    self.trans[1] = t[1] - self.trans0[1]
-    self.rot = (r[2] - self.rot0) * 180
+    self.initialized = False  # can't start until we initialize odometry
+    self.odomTrans = [0,0]  
+    self.odomRot = 0
+    self.mapTrans = [0,0]
+    self.mapRot = 0
+  def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
+    self.odomTrans0 = t
+    self.odomRot0 = r[2]
+  def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
+    self.odomTrans[0] = t[0] - self.odomTrans0[0]
+    self.odomTrans[1] = t[1] - self.odomTrans0[1]
+    self.odomRot = (r[2] - self.odomRot0) * 180.0
+  def mapPositionNew(self, mapT, mapR):  # take in a new map reading
+    self.mapTrans = mapT  # assume map tranlation and rotation are base truth
+    self.mapRot = mapR
+    self.resetOdom(self.odomTrans, self.odomRot)  # set odometry offsets back to 0
+  def position(self):  # returns the most recent map position + any more recent odometry offsets
+    return [[self.mapTrans[0]+self.odomTrans[0], self.mapTrans[1]+self.odomTrans[1]], self.mapRot+self.odomRot]
 #    self.logPosInfo()
   def logPosInfo(self):
     rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
@@ -172,14 +179,14 @@ def init_node():
       rp.initialized = True
     except (tf.LookupException, tf.ConnectivityException):
       continue
-  rp.initialPos(trans, rot)
+  rp.resetOdom(trans, rot)
   while not rospy.is_shutdown():
     try:
       (trans, rot) = odoListener.lookupTransform('/odom', '/base_link', rospy.Time(0))
     except (tf.LookupException, tf.ConnectivityException):
       continue
 #    rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f", trans[0], trans[1], rot[2])
-    rp.positionNew(trans, rot)
+    rp.odomReadingNew(trans, rot)
 #    cmd.send()
     rate.sleep()
 
