@@ -39,12 +39,16 @@ class LocalMap:
 
   def wallIs(self, line, extremes):
     newWall = Wall(line, extremes)
-    i = self.wallIndex(newWall)  # returns an index if close enough, -1 otherwise
+    [i, angle] = self.wallIndex(newWall)  # returns an index if close enough, -1 otherwise
     if i < 0:  # no similar wall found
       if self.isRectilinear(newWall):  # this one will work
         self.walls.append(newWall)
+      return None
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
+      distance = walls[i].distanceToPoint([extremes[1]-extremes[0],extremes[3]-extremes[2]])
+      return (angle, distance)
+        
 
   def wallIndex(self, w):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
     minAngle = self.maxAngleDiff  # make sure we have at most this much angle diff
@@ -68,7 +72,7 @@ class LocalMap:
         self.walls[retval].bottommost = w.bottommost
       if w.topmost > self.walls[retval].topmost:
         self.walls[retval].topmost = w.topmost
-    return retval
+    return [retval, minAngle]
 
   def isRectilinear(self, w):  # takes in a new wall, makes sure it sits at either 90 or 180 degrees to other walls
     if len(self.walls) == 0:
