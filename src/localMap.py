@@ -8,19 +8,30 @@ class Wall:
 
 class LocalMap:
   def __init__(self):
-    self.walls = []
-    self.corners = []
-    self.minAngleDiff = 5.0 * math.pi / 180.0
-    self.minDistDiff = 0.4
+    self.walls = []  # list of walls, each element is of the format [wall, confidence]
+    self.maxAngleDiff = 5.0 * math.pi / 180.0  # the maximum degree difference to be the same wall
+    self.maxDistDiff = 0.4  # the maximum distance apart to be the same wall
+    self.rectilinearMin = math.pi / 2.0 - self.MaxAngleDiff  # minimum angle to be rectilinear
+    self.rectilinearMax = math.pi / 2.0 + self.MaxAngleDiff
+
   def wallIs(self, w):
-    if not wallExists(w):
-      walls.push(Wall(w))
-      for wall in self.walls:
-        isect = wall.intersection(w)
-        if isect is not None:
-          self.corners.push(wall.intersection(w))
-  def wallExists(self, w):
+    i = self.wallIndex(w)  # returns an index if close enough, -1 otherwise
+    if i < 0:  # no similar wall found
+      if self.isRectilinear(w):  # this one will work
+        walls.push([Wall(w), 1])
+    else:  # similar wall was found
+      walls[i][1] += 1  # add confidence value
+
+  def wallIndex(self, w):
     for wall in self.walls:
-      if wall.angleBetween(w) < self.minAngleDiff and wall.distanceToPoint(w.origin) < self.minDistDiff:
+      if wall.angleBetween(w) < self.maxAngleDiff and wall.distanceToPoint(w.origin) < self.maxDistDiff:
+        return self.walls.index(wall)
+    return -1
+
+  def isRectilinear(self, w):
+    for wall in self.walls:
+      a = wall.angleBetween(w)
+      if a > self.rectilinearMin and a < self.rectilinearMax:
         return True
     return False
+            
