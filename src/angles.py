@@ -4,6 +4,7 @@ import rospy
 import tf
 from math import *
 from ransac import *
+from localMap import *
 # import cv	# doesn't recognize cv
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
@@ -33,7 +34,8 @@ def laserReadingToCartesianPoints(reading):
   return map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)), reading.ranges, xrange(0, len(reading.ranges)))
 
 class LaserInterpreter:
-  def __init__(self): # constructor
+  def __init__(self, m): # constructor
+    self.localMap = m
     self.readings = []
     self.maxReadings = 10
     self.R = 100  # number of subdivisions of radius
@@ -82,6 +84,7 @@ class LaserInterpreter:
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
     rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
     rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
+    self.localMap.wallIs(bestLine, extremes)
 
 class RobotPosition:
   def __init__(self):
@@ -139,8 +142,10 @@ class Commands:
     twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
     self.velPublish.publish(twist)
 
-li = LaserInterpreter()	# global LaserInterpreter object
+localMap = LocalMap() # the map object
+li = LaserInterpreter(localMap)	# global LaserInterpreter object
 rp = RobotPosition() # global RobotPosition object
+
 
 def callback(reading):
   li.laserReadingNew(reading)
