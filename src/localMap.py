@@ -46,7 +46,7 @@ class LocalMap:
       return None
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
-      distance = walls[i].distanceToPoint([extremes[1]-extremes[0],extremes[3]-extremes[2]])
+      distance = self.walls[i].distanceToPoint([extremes[1]-extremes[0],extremes[3]-extremes[2]])
       return (angle, distance)
         
 
