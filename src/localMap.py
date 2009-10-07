@@ -18,6 +18,18 @@ class Wall:
     return self.lineModel.origin
   def trajectory(self):
     return self.lineModel.trajectory
+  def segment(self):
+    t1 = t2 = 5000
+    if self.lineModel.trajectory[0] != 0:
+      t1 = (self.leftmost - self.lineModel.origin[0])/self.lineModel.trajectory[0]
+      t2 = (self.rightmost - self.lineModel.origin[0])/self.lineModel.trajectory[0]
+    if self.lineModel.trajectory[1] != 0:
+      t1 = min(t1, (self.bottommost - self.lineModel.origin[1])/self.lineModel.trajectory[1])
+      t2 = min(t2, (self.topmost - self.lineModel.origin[1])/self.lineModel.trajectory[1])
+    origin = self.lineModel.point(t1)
+    terminus = self.lineModel.point(t2)
+    return [origin, terminus]
+    
 
 class LocalMap:
   def __init__(self):
@@ -25,16 +37,16 @@ class LocalMap:
     self.maxAngleDiff = 5.0 * math.pi / 180.0  # the maximum degree difference to be the same wall
     self.maxDistDiff = 0.4  # the maximum distance apart to be the same wall
 
-  def wallIs(self, line, extremes, odom):
+  def wallIs(self, line, extremes):
     newWall = Wall(line, extremes)
-    i = self.wallIndex(newWall, odom)  # returns an index if close enough, -1 otherwise
+    i = self.wallIndex(newWall)  # returns an index if close enough, -1 otherwise
     if i < 0:  # no similar wall found
       if self.isRectilinear(newWall):  # this one will work
         self.walls.append(newWall)
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
 
-  def wallIndex(self, w, odom):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
+  def wallIndex(self, w):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
     minAngle = self.maxAngleDiff  # make sure we have at most this much angle diff
     minDist = self.maxDistDiff  # at most this much distance diff
     retval = -1  # retval of -1 means no match
@@ -56,8 +68,6 @@ class LocalMap:
         self.walls[retval].bottommost = w.bottommost
       if w.topmost > self.walls[retval].topmost:
         self.walls[retval].topmost = w.topmost
-    angleError = angle  # the difference between what you thought and where the wall is
-    # how to calculate the distance error?
     return retval
 
   def isRectilinear(self, w):  # takes in a new wall, makes sure it sits at either 90 or 180 degrees to other walls

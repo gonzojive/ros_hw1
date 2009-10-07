@@ -13,6 +13,7 @@ def printWalls():
   for w in lm.walls:
     print "  O=(", w.origin()[0], ", ", w.origin()[1], ")  D=(", w.trajectory()[0], ", ", w.trajectory()[1], ")",
     print "  polar = (", w.polar[0], ", ", w.polar[1], ")"
+    print "  segment = (", w.segment()[0][0], ", ", w.segment()[0][1], ") to (", w.segment()[1][0], ", ", w.segment()[1][1], ")"
 
 
 if __name__ == "__main__":

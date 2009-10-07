@@ -34,6 +34,9 @@ class LineModel:
         t *= (-anotherLineModel.trajectory[1]*(anotherLineModel.origin[0]-self.origin[0])+anotherLineModel.trajectory[0]*(anotherLineModel.origin[1]-self.origin[0]))
         return [self.origin[0]+t*self.trajectory[0], self.origin[1]+t*self.trajectory[1]]
 
+    def point(self, t):
+      return [self.origin[0]+t*self.trajectory[0], self.origin[1]+t*self.trajectory[1]]
+
 def fitLineWithRansac(points, distance_cutoff):
     return ransac(points, 2, LineModel, lambda model, pt: model.distanceToPoint(pt) < distance_cutoff)
     
