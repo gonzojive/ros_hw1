@@ -1,5 +1,5 @@
 from ransac import LineModel
-from math import *
+import math
 
 class Wall:
   def __init__(self, line):
@@ -10,7 +10,7 @@ class LocalMap:
   def __init__(self):
     self.walls = []
     self.corners = []
-    self.minAngleDiff = 5.0 * pi / 180.0
+    self.minAngleDiff = 5.0 * math.pi / 180.0
     self.minDistDiff = 0.4
   def wallIs(self, w):
     if not wallExists(w):
