@@ -11,11 +11,17 @@ from geometry_msgs.msg import Vector3
 
 r2d = 180.0/3.14159
 
+#Given an angle and a radius, returns the X,Y coordinates of that point in cartesian coordinates
+# this assumes the following:
+# 1.  The cartesian coordinate is such that in front of the robot is positive X and the LEFT of
+# the robot is positive Y
+# 2.  theta = 0, r = 1 corresponds to (0, -1) and theta = pi/2, r=1 corresponds to (1, 0)
 def polarToCartesian(r, theta):
   x = r * cos(theta)
   y = r * sin(theta)
   return [y, -x]
 
+# Given a bunch of laser readings
 def laserReadingAngle(i, readingRanges):
   num_scan_points = len(readingRanges)
   if num_scan_points > 0:
@@ -59,7 +65,7 @@ class LaserInterpreter:
       self.doHough = 0
     if self.doRansac >= 1:
       self.ransac(reading)
-      self.doRansac = 0
+      self.doRansac = 1
 #    self.logReadingInfo(reading)
   def logReadingInfo(self, reading):
     rospy.loginfo("Min: %d  Max: %d  Inc: %f  Len: %d", r2d*reading.angle_min, r2d*reading.angle_max, r2d*reading.angle_increment, len(reading.ranges))
@@ -96,8 +102,13 @@ class LaserInterpreter:
       rospy.loginfo( "Count = %d  dist = %0.2f  angle = %0.2f", peak[0], self.radiusValues[peak[1]], self.thetaValues[peak[2]]*r2d)
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading)
-    for pt in cartesianPoints:
-      rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
+    [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
+    #for pt in cartesianPoints:
+    #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
+    def s(arr):
+      return "[%0.2f, %0.2f]" % (arr[0], arr[1])
+    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
+#    rospy.loginfo("   Inliers: %s" % inliers)
 
 class RobotPosition:
   def __init__(self):

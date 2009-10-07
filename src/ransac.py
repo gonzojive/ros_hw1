@@ -17,7 +17,7 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
         random.shuffle(mutable_points)
         return [ mutable_points[:num_points_necessary_for_fit], mutable_points[num_points_necessary_for_fit:]]
         
-    for iteration in xrange(0, 500):
+    for iteration in xrange(0, 150):
         [fit_points, test_points] = random_partition()
         model = model_callback(fit_points)
         inliers = filter(lambda test_point : inlierp_callback(model, test_point), test_points)
@@ -69,7 +69,7 @@ class LineModel:
         self.origin = a
         self.trajectory = a_to_b
     def distanceToPoint(self, pt):
-        w = vector_minus(pt, self.trajectory)
+        w = vector_minus(pt, self.origin)
         traj_cross_w = cross(self.trajectory, w)
         return vector_length(traj_cross_w) / vector_length(self.trajectory)
         
