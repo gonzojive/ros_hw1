@@ -78,7 +78,7 @@ class LaserInterpreter:
     rospy.loginfo("Printing %d walls." % len(localMap.walls))
     for w in self.localMap.walls:
       [begin, end] = w.segment()
-      self.mapviz.vizSegment(begin, end)
+    self.mapviz.vizSegment(begin, end)
       
 #    self.logReadingInfo(reading)
 
