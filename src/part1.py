@@ -79,8 +79,9 @@ class LaserInterpreter:
     rospy.loginfo("Printing %d walls." % len(localMap.walls))
     for w in self.localMap.walls:
       [begin, end] = w.segment()
-#      self.mapviz.vizSegment(begin, end)
+      self.mapviz.vizSegment(begin, end)
       rospy.loginfo("Wall: (%0.2f, %0.2f) to (%0.2f, %0.2f)", begin[0], begin[1], end[0], end[1])
+#      rospy.loginfo("Extremes: %0.2f %0.2f %0.2f %0.2f", w.leftmost, w.rightmost, w.bottommost, w.topmost)
       
 #    self.logReadingInfo(reading)
 
@@ -91,7 +92,8 @@ class LaserInterpreter:
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading, self.position)
     [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
-#    self.mapviz.vizPoints(inliers)
+#    rospy.loginfo("Extremes: %0.2f %0.2f %0.2f %0.2f", extremes[0], extremes[1], extremes[2], extremes[3])
+    self.mapviz.vizPoints(inliers)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     def s(arr):
@@ -138,7 +140,7 @@ class Commands:
     self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
     self.stage = 1
   def send(self):
-'''    
+    '''    
     xVel = 0
     thetaVel = 0
     if self.stage == 1:  # haven't gone forward enough
@@ -159,7 +161,7 @@ class Commands:
         self.stage += 1
     twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
     self.velPublish.publish(twist)
-'''
+    '''
     
 
 localMap = LocalMap() # the map object

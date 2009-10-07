@@ -19,13 +19,12 @@ class Wall:
   def trajectory(self):
     return self.lineModel.trajectory
   def segment(self):
-    t1 = t2 = 5000
-    if self.lineModel.trajectory[0] != 0:
+    if abs(self.lineModel.trajectory[0]) > abs(self.lineModel.trajectory[1]):  # more horizontal than vertical
       t1 = (self.leftmost - self.lineModel.origin[0])/self.lineModel.trajectory[0]
       t2 = (self.rightmost - self.lineModel.origin[0])/self.lineModel.trajectory[0]
-    if self.lineModel.trajectory[1] != 0:
-      t1 = min(t1, (self.bottommost - self.lineModel.origin[1])/self.lineModel.trajectory[1])
-      t2 = min(t2, (self.topmost - self.lineModel.origin[1])/self.lineModel.trajectory[1])
+    else:  # more vertical than horizontal
+      t1 = (self.bottommost - self.lineModel.origin[1])/self.lineModel.trajectory[1]
+      t2 = (self.topmost - self.lineModel.origin[1])/self.lineModel.trajectory[1]
     origin = self.lineModel.point(t1)
     terminus = self.lineModel.point(t2)
     return [origin, terminus]
