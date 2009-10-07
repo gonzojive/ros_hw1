@@ -1,4 +1,5 @@
 import random
+import math
 
 # given some points, randomly chooses num_points_necessary_for_fit 500 or so
 # times.  At each iteration model_callback is called taking as an argument a
@@ -78,6 +79,13 @@ class LineModel:
         w = vector_minus(pt, self.origin)
         traj_cross_w = cross(self.trajectory, w)
         return vector_length(traj_cross_w) / vector_length(self.trajectory)
+    def intersection(self, anotherLineModel):
+        denom = -self.trajectory[0]*anotherLineModel.trajectory[1]+anotherLineModel.trajectory[0]*self.trajectory[1]
+        if denom == 0:
+          return None
+        t = 1.0/denom
+        t *= (-anotherLineModel.trajectory[1]*(anotherLineModel.origin[0]-self.origin[0])+anotherLineModel.trajectory[0]*(anotherLineModel.origin[1]-self.origin[0]))
+        return [self.origin[0]+t*self.trajectory[0], self.origin[1]+t*self.trajectory[1]]
         
 def fitLineWithRansac(points, distance_cutoff):
     return ransac(points, 2, LineModel, lambda model, pt: model.distanceToPoint(pt) < distance_cutoff)
