@@ -1,4 +1,4 @@
-from ransac import LineModel
+from line import LineModel
 import math
 
 class Wall:

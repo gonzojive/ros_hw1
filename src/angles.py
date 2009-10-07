@@ -3,7 +3,7 @@ import roslib; roslib.load_manifest('hw1')
 import rospy
 import tf
 from math import *
-from ransac import *
+from line import *
 from localMap import *
 # import cv	# doesn't recognize cv
 from sensor_msgs.msg import LaserScan
