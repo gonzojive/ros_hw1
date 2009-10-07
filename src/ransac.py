@@ -21,7 +21,7 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
         [fit_points, test_points] = random_partition()
         model = model_callback(fit_points)
         inliers = filter(lambda test_point : inlierp_callback(model, test_point), test_points)
-        if ((not best_model) or len(inliers) > len(best_inliers)):
+        if ((not best_model) or (len(inliers) > len(best_inliers))):
            best_model = model
            best_inliers = inliers
     
@@ -62,12 +62,18 @@ def normalize(v):
     l = vector_length(v)
     return map(lambda x : x / l, v)
 
+def vector_dot(v,w):
+    return sum(map( lambda a,b: a * b, v, w))
+
 class LineModel:
     def __init__(self, two_cartesian_points):
         [a, b] = two_cartesian_points
         a_to_b = map(lambda acoord, bcoord: bcoord - acoord, a, b)
         self.origin = a
-        self.trajectory = a_to_b
+        self.trajectory = normalize(a_to_b)
+    def angleBetween(self, anotherLineModel):
+        dot_result =  vector_dot(self.trajectory, anotherLineModel.trajectory)
+        return math.acos(dot_result)
     def distanceToPoint(self, pt):
         w = vector_minus(pt, self.origin)
         traj_cross_w = cross(self.trajectory, w)

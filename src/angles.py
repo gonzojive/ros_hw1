@@ -108,7 +108,7 @@ class LaserInterpreter:
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
     rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
-#    rospy.loginfo("   Inliers: %s" % inliers)
+    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
 
 class RobotPosition:
   def __init__(self):
