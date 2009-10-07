@@ -96,7 +96,10 @@ class LaserInterpreter:
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
     rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
     rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
-    self.localMap.wallIs(bestLine, extremes)
+    ret = self.localMap.wallIs(bestLine, extremes)
+    if ret != None:
+      position.laserOdom(ret)
+
 
 class RobotPosition:
   def __init__(self):
