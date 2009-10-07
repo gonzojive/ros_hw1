@@ -75,7 +75,7 @@ class LaserInterpreter:
 
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading)
-    [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
+    [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     def s(arr):
