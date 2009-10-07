@@ -30,12 +30,14 @@ def laserReadingAngle(i, readingRanges):
   else:
     return 0 #degenerate
 
-def laserReadingToCartesianPoints(reading):
-  return map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)), reading.ranges, xrange(0, len(reading.ranges)))
+def laserReadingToCartesianPoints(reading, position):
+  local = map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)+position.rot), reading.ranges, xrange(0, len(reading.ranges)))
+  return [[p[0]-position.trans[0],p[1]-position.trans[1]] for p in local]
 
 class LaserInterpreter:
-  def __init__(self, m): # constructor
+  def __init__(self, p, m): # constructor
     self.localMap = m
+    self.position = p
     self.readings = []
     self.maxReadings = 10
     self.R = 100  # number of subdivisions of radius
@@ -76,7 +78,7 @@ class LaserInterpreter:
     print reading.ranges[-1], reading.ranges[len(reading.ranges)/2], reading.ranges[0]
 
   def ransac(self, reading):
-    cartesianPoints = laserReadingToCartesianPoints(reading)
+    cartesianPoints = laserReadingToCartesianPoints(reading, self.position)
     [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
@@ -102,15 +104,6 @@ class RobotPosition:
 #    self.logPosInfo()
   def logPosInfo(self):
     rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
-
-#class Wall:
-#  def __init__(self, 
-
-#class RotateWithLaserReadings:
-#  def __init(self):
-#    self.lastFrameWalls = []
-
-#def rotateRobot
     
 
 class Commands:
@@ -143,8 +136,8 @@ class Commands:
     self.velPublish.publish(twist)
 
 localMap = LocalMap() # the map object
-li = LaserInterpreter(localMap)	# global LaserInterpreter object
 rp = RobotPosition() # global RobotPosition object
+li = LaserInterpreter(rp, localMap)	# global LaserInterpreter object
 
 
 def callback(reading):
