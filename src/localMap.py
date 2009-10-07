@@ -21,27 +21,27 @@ class Wall:
 
 class LocalMap:
   def __init__(self):
-    self.walls = []  # list of walls, each element is of the format [wall, confidence]
+    self.walls = []  # list of walls
     self.maxAngleDiff = 5.0 * math.pi / 180.0  # the maximum degree difference to be the same wall
     self.maxDistDiff = 0.4  # the maximum distance apart to be the same wall
 
-  def wallIs(self, line, extremes):
+  def wallIs(self, line, extremes, odom):
     newWall = Wall(line, extremes)
-    i = self.wallIndex(newWall)  # returns an index if close enough, -1 otherwise
+    i = self.wallIndex(newWall, odom)  # returns an index if close enough, -1 otherwise
     if i < 0:  # no similar wall found
       if self.isRectilinear(newWall):  # this one will work
         self.walls.append(newWall)
     else:  # similar wall was found
       self.walls[i].confidence += 1  # add confidence value
 
-  def wallIndex(self, w):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
+  def wallIndex(self, w, odom):  # takes in a new wall, outputs the index of the most similar existing wall, or -1 if none
     minAngle = self.maxAngleDiff  # make sure we have at most this much angle diff
     minDist = self.maxDistDiff  # at most this much distance diff
     retval = -1  # retval of -1 means no match
     for wall in self.walls:  # iterate over all the walls
       angle = wall.angleBetween(w)  # calculate the difference angle
       if angle > math.pi - self.maxAngleDiff:  # close to pi is the same as close to 0
-        angle = math.pi - angle  # flip the angle
+        angle = angle - math.pi  # make the angle negative so we know which way to correct odom
       if angle < minAngle and wall.distanceToPoint(w.origin()) < minDist:  # smallest differences yet
         # check for any separation between the new wall and the old one
         if not (w.leftmost > wall.rightmost or w.rightmost < wall.leftmost or w.bottommost > wall.topmost or w.topmost < wall.bottommost):
@@ -56,6 +56,8 @@ class LocalMap:
         self.walls[retval].bottommost = w.bottommost
       if w.topmost > self.walls[retval].topmost:
         self.walls[retval].topmost = w.topmost
+    angleError = angle  # the difference between what you thought and where the wall is
+    # how to calculate the distance error?
     return retval
 
   def isRectilinear(self, w):  # takes in a new wall, makes sure it sits at either 90 or 180 degrees to other walls
