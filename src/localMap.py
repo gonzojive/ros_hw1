@@ -65,7 +65,7 @@ class LocalMap:
           retval = self.walls.index(wall)
     if retval >= 0:  # if we found a match, update extremes
       if w.leftmost < self.walls[retval].leftmost:
-        self.walls[retval].leftmost = w.lefmost
+        self.walls[retval].leftmost = w.leftmost
       if w.rightmost > self.walls[retval].rightmost:
         self.walls[retval].rightmost = w.rightmost
       if w.bottommost < self.walls[retval].bottommost:
