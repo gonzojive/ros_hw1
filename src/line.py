@@ -37,7 +37,24 @@ class LineModel:
     def point(self, t):
       return [self.origin[0]+t*self.trajectory[0], self.origin[1]+t*self.trajectory[1]]
 
+
 def fitLineWithRansac(points, distance_cutoff):
-    return ransac(points, 2, LineModel, lambda model, pt: model.distanceToPoint(pt) < distance_cutoff)
+    [best_model, best_inliers] = ransac(points, 2, LineModel, lambda model, pt: model.distanceToPoint(pt) < distance_cutoff)
+    
+    left = right = best_inliers[0][0]
+    bottom = top = best_inliers[0][1]
+    for pt in best_inliers:
+      if pt[0] < left:
+        left = pt[0]
+      if pt[0] > right:
+        right = pt[0]
+      if pt[1] < bottom:
+        bottom = pt[1]
+      if pt[1] > top:
+        top = pt[1]
+
+    return [best_model, best_inliers, [left, right, bottom, top]]
+
+    
     
     

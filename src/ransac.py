@@ -1,6 +1,8 @@
 import random
 import math
 
+RANSAC_ITERATIONS = 15
+
 # given some points, randomly chooses num_points_necessary_for_fit 500 or so
 # times.  At each iteration model_callback is called taking as an argument a
 # list of num_points_necessary_for_fit points with which it generates a black box
@@ -18,7 +20,7 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
         random.shuffle(mutable_points)
         return [ mutable_points[:num_points_necessary_for_fit], mutable_points[num_points_necessary_for_fit:]]
         
-    for iteration in xrange(0, 150):
+    for iteration in xrange(0, RANSAC_ITERATIONS):
         [fit_points, test_points] = random_partition()
         model = model_callback(fit_points)
         inliers = filter(lambda test_point : inlierp_callback(model, test_point), test_points)
@@ -26,18 +28,7 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
            best_model = model
            best_inliers = inliers
     
-    left = right = best_inliers[0][0]
-    bottom = top = best_inliers[0][1]
-    for pt in best_inliers:
-      if pt[0] < left:
-        left = pt[0]
-      if pt[0] > right:
-        right = pt[0]
-      if pt[1] < bottom:
-        bottom = pt[1]
-      if pt[1] > top:
-        top = pt[1]
-    return [best_model, best_inliers, [left, right, bottom, top]]
+    return [best_model, best_inliers]
 
 # RANSAC for fitting 2d/3d lines to a point cloud
 

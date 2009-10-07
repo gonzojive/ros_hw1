@@ -5,6 +5,7 @@ import tf
 from math import *
 from line import *
 from localMap import *
+from lineviz import *
 # import cv	# doesn't recognize cv
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
@@ -50,6 +51,7 @@ class LaserInterpreter:
     self.thetaValues = []
     self.doHough = 0  # determines whether to perform Hough or not
     self.doRansac = 1
+    self.mapviz = LocalMapVisualizer()
     cur = 0.0
     for i in range(self.R):  # fill in the radius bins
       self.radiusValues.append(cur)
@@ -61,6 +63,7 @@ class LaserInterpreter:
     self.A = [self.T*[0] for i in range(self.R)]  # make the R x T accumulator array
 
   def laserReadingNew(self, reading):
+    rospy.loginfo('Laser reading received...')  
     # Do some processing on the new laser reading
     self.readings.append(reading)
     if len(self.readings) > self.maxReadings:
@@ -71,6 +74,12 @@ class LaserInterpreter:
     if self.doRansac >= 1:
       self.ransac(reading)
       self.doRansac = 1
+    
+    rospy.loginfo("Printing %d walls." % len(localMap.walls))
+    for w in self.localMap.walls:
+      [begin, end] = w.segment()
+      self.mapviz.vizSegment(begin, end)
+      
 #    self.logReadingInfo(reading)
 
   def logReadingInfo(self, reading):
@@ -80,6 +89,7 @@ class LaserInterpreter:
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading, self.position)
     [bestLine, inliers, extremes] = fitLineWithRansac(cartesianPoints, .03)
+    self.mapviz.vizPoints(inliers)
     #for pt in cartesianPoints:
     #rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     def s(arr):
@@ -143,11 +153,12 @@ li = LaserInterpreter(rp, localMap)	# global LaserInterpreter object
 def callback(reading):
   li.laserReadingNew(reading)
 
-def angles():
-  rospy.init_node('angles')
-  rospy.loginfo('"Angles" node is awake')
+def init_node():
+  rospy.init_node('kludge1_1')
+  rospy.loginfo('"KLUDGE 1.1" node is awake')
   rospy.Subscriber("laser", LaserScan, callback) # listen to "laser"
   rospy.loginfo("Subscribed to laser readings")
+  
   odoListener = tf.TransformListener() # listen to tf
   rospy.loginfo("Subscribed to odometry frames")
   rate = rospy.Rate(10.0) # 10 Hz
@@ -171,6 +182,6 @@ def angles():
 
 if __name__ == '__main__':
   try:
-    angles()
+    init_node()
   except rospy.ROSInterruptException:
     pass
