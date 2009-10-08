@@ -9,8 +9,6 @@ import geometry_msgs.msg
 import roslib.msg
 import std_msgs.msg
 
-from localMap import *
-
 from visualization_msgs.msg import *
 from geometry_msgs.msg import *
 from roslib.rostime import Duration
