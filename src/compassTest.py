@@ -4,9 +4,8 @@ import rospy
 import tf
 from math import *
 from line import *
-from localMap import *
 from lineviz import *
-# import cv	# doesn't recognize cv
+from compass import *
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Vector3
@@ -37,7 +36,7 @@ def laserReadingToCartesianPoints(reading):
 class LaserInterpreter:
   def __init__(self, p, c): # constructor
     self.compass = c
-    self.position = p
+#    self.position = p
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
 
@@ -46,7 +45,6 @@ class LaserInterpreter:
     # Do some processing on the new laser reading
     if self.doRansac >= 1:
       self.ransac(reading)
-      self.doRansac = 1
 
   def logReadingInfo(self, reading):
     rospy.loginfo("Min: %d  Max: %d  Inc: %f  Len: %d", r2d*reading.angle_min, r2d*reading.angle_max, r2d*reading.angle_increment, len(reading.ranges))
@@ -54,6 +52,8 @@ class LaserInterpreter:
 
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading)
+    for pt in cartesianPoints:
+      rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
     [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
     self.mapviz.vizPoints(inliers)
     def s(arr):
@@ -69,29 +69,29 @@ class RobotPosition:
     self.initialized = False  # can't start until we initialize odometry
     self.odomTrans = [0,0]  
     self.odomRot = 0
-    self.mapTrans = [0,0]
-    self.mapRot = 0
-  def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
+    self.offsetTrans = [0,0]
+    self.offsetRot = 0
+  def resetOdom(self, t, r):  # resets the odometry offsets
     self.odomTrans0 = t
     self.odomRot0 = r[2]
   def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
     self.odomTrans[0] = t[0] - self.odomTrans0[0]
     self.odomTrans[1] = t[1] - self.odomTrans0[1]
-    self.odomRot = (r[2] - self.odomRot0) * 180.0
-  def mapPositionNew(self, mapT, mapR):  # take in a new map reading
-    self.mapTrans = mapT  # assume map tranlation and rotation are base truth
-    self.mapRot = mapR
-    self.resetOdom(self.odomTrans, self.odomRot)  # set odometry offsets back to 0
-  def addMapRotationOffset(self, offset):  # just offset the current reading
-    self.mapRot += offset
-  def position(self):  # returns the most recent map position + any more recent odometry offsets
-    return [[self.mapTrans[0]+self.odomTrans[0], self.mapTrans[1]+self.odomTrans[1]], self.mapRot+self.odomRot]
-#    self.logPosInfo()
+    self.odomRot = r[2] - self.odomRot0
+  def compassReading(self, angles):  # take in a new compass reading
+    realAngle = 0
+    minDiff = 1000
+    for a in angles:
+      if abs(self.rotation()-a) < minDiff:  # closest angle so far
+        realAngle = a
+    self.offsetRot = realAngle - self.rotation()  # make the offset take it to the real angle
+  def position(self):  # returns the position
+    return [self.offsetTrans[0]+self.odomTrans[0], self.offsetTrans[1]+self.odomTrans[1]]
+  def rotation(self):  # returns the rotation
+    return self.offsetRot + self.odomRot
   def logPosInfo(self):
     rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
-    
 
-compass = Compass()
 
 class Commands:
   def __init__(self, rp):
@@ -103,7 +103,7 @@ class Commands:
   def send(self):
     self.velPublish.publish(Twist(Vector3(0,0,0),Vector3(0,0,4.0/r2d)))
     
-
+compass = Compass()
 rp = RobotPosition() # global RobotPosition object
 li = LaserInterpreter(rp, compass)	# global LaserInterpreter object
 
