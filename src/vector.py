@@ -82,3 +82,9 @@ def vector_angle_signed(v, w):
     #    c = cross(y,z);
     #     angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));
     #3angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));
+
+def vector_rotate_2d(v, theta_about_z):
+    theta = theta_about_z
+    [x, y] = v
+    return [x * math.cos(theta) - y * math.sin(theta), x * math.sin(theta) + y * math.cos(theta)]
+

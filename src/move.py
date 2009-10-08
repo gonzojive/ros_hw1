@@ -50,35 +50,29 @@ class MoveToGoal:
         self.viz.vizSegment([0,0,0], vToGoal, the_id=1)
         self.viz.vizSegment([0,0,0], vForward, the_id=2)
         
-        rospy.loginfo("Theta: %0.2f Origin: [%0.2f, %0.2f] Goal: [%0.2f, %0.2f] vToGoal: [%0.2f, %0.2f]", r2d(self.rp.theta()), vOrigin[0], vOrigin[1],  self.goal[0], self.goal[1], vToGoal[0], vToGoal[1])
-        
-
-
-
+    
         # determine the angle between the the forward vector and the v
         signedAngleToGoal = vector_angle_signed(vForward, vToGoal)
 
+
+        rospy.loginfo("Theta: %0.2f Origin: [%0.2f, %0.2f] Goal: [%0.2f, %0.2f] vToGoal: [%0.2f, %0.2f]. AngTogoal: %0.2f degrees", r2d(self.rp.theta()), vOrigin[0], vOrigin[1],  self.goal[0], self.goal[1], vToGoal[0], vToGoal[1], r2d(signedAngleToGoal))
         #rospy.loginfo("Theta: %0.2f", r2d(self.rp.theta()))
         #rospy.loginfo("Origin: [%0.2f, %0.2f] vToGoal: [%0.2f, %0.2f] Forward: [%0.2f, %0.2f]", vOrigin[0], vOrigin[1], vToGoal[0], vToGoal[1], vForward[0], vForward[1])
 
         MAX_ANGULAR_VELOCITY = d2r(10.0)
-        MAX_LINEAR_VELOCITY = .10 # 50 cm
+        MAX_LINEAR_VELOCITY = .50 # 50 cm
 
         angularVelocity = 0
         linearVelocity = Vector3(0,0,0)
         
         # if the angle is off by more than 5 degrees, just rotate
-        if m
-
-
-        ath.fabs(signedAngleToGoal) > d2r(80.0) and normalizeAngle90(signedAngleToGoal) > d2r(80.0):
+        if math.fabs(signedAngleToGoal) > d2r(80.0) and normalizeAngle90(signedAngleToGoal) > d2r(80.0):
             angularVelocity = signedAngleToGoal
             if math.fabs(signedAngleToGoal) > MAX_ANGULAR_VELOCITY:
                sign = (signedAngleToGoal >= 0 and 1.0) or -1.0
                angularVelocity = MAX_ANGULAR_VELOCITY * sign
-               
-            rospy.loginfo("Origin: [%0.2f, %0.2f] vToGoal: [%0.2f, %0.2f] Forward: [%0.2f, %0.2f]", vOrigin[0], vOrigin[1], vToGoal[0], vToGoal[1], vForward[0], vForward[1])
-            rospy.loginfo("Theta: %0.2f degrees. Rotating the robot by %0.2f degrees. %0.2f degrees to goal", r2d(self.rp.theta()), r2d(angularVelocity), r2d(signedAngleToGoal))
+            #rospy.loginfo("Origin: [%0.2f, %0.2f] vToGoal: [%0.2f, %0.2f] Forward: [%0.2f, %0.2f]", vOrigin[0], vOrigin[1], vToGoal[0], vToGoal[1], vForward[0], vForward[1])
+            rospy.loginfo("Theta: %0.2f degrees. Rotating the robot by [%0.2f] of [%0.2f] degrees to goal", r2d(self.rp.theta()), r2d(angularVelocity), r2d(signedAngleToGoal))
             
         elif vector_length_squared(vToGoal) > .05:
             vVel = vToGoal

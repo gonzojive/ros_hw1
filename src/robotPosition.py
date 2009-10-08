@@ -6,7 +6,7 @@ from line import *
 from util import *
 from vector import *
 from lineviz import *
-
+from walls import *
 
 class RobotPosition:
     def __init__(self):
@@ -17,7 +17,8 @@ class RobotPosition:
         self.mapRot = 0
     def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
         self.odomTrans0 = t
-        self.odomRot0 = math.acos(r[3])*2.0
+        self.odomRot0 = math.acos(r[3])*2.0 # set the original rotation
+        rospy.loginfo("Original ODOM: (%0.2f, %0.2f) at %0.2f degrees", self.odomTrans0[0], self.odomTrans0[1], self.odomRot0)
     def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
         self.odomTrans[0] = t[0] - self.odomTrans0[0]
         self.odomTrans[1] = t[1] - self.odomTrans0[1]
@@ -45,7 +46,7 @@ class RobotPosition:
     def origin(self):
         x = self.mapTrans[0]+self.odomTrans[0]
         y = self.mapTrans[1]+self.odomTrans[1]
-        return [x, y]
+        return vector_rotate_2d([x, y] , -1.0 * self.odomRot0)
     def logPosInfo(self):
         rospy.loginfo("Odometry: (%0.2f, %0.2f) at xxx degrees", self.odomTrans[0], self.odomTrans[1])
 
