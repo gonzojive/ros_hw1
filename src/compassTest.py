@@ -82,9 +82,9 @@ class LaserInterpreter:
 #    self.mapviz.vizPoints(cartesianPoints)
 #    for pt in cartesianPoints:
 #      rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
-    temp = time.time()
+#    temp = time.time()
 #    rospy.loginfo("Starting RANSAC")
-    [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
+    [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .015)
    
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])

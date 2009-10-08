@@ -1,7 +1,7 @@
 import random
 import math
 
-RANSAC_ITERATIONS = 15
+RANSAC_ITERATIONS = 50
 
 # given some points, randomly chooses num_points_necessary_for_fit 500 or so
 # times.  At each iteration model_callback is called taking as an argument a
@@ -21,7 +21,7 @@ def ransac(points, num_points_necessary_for_fit, model_callback, inlierp_callbac
         return [ mutable_points[:num_points_necessary_for_fit], mutable_points[num_points_necessary_for_fit:]]
         
     for iteration in xrange(0, RANSAC_ITERATIONS):
-	if len(best_inliers) > 25:
+	if len(best_inliers) > 35:
 	   break
         [fit_points, test_points] = random_partition()
         model = model_callback(fit_points)
