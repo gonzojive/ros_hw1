@@ -12,6 +12,7 @@ from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Vector3
 
 r2d = 180.0/3.14159
+d2r = 3.14159/180.0
 
 #Given an angle and a radius, returns the X,Y coordinates of that point in cartesian coordinates
 # this assumes the following:
@@ -30,7 +31,7 @@ def angleDifferenceRadians(a1, a2):  # returns angle difference in the range [0,
     temp -= 2*pi
   while temp < 0:
     temp += 2*pi
-  rospy.loginfo("Angle Diff: a1=%0.2f, a2=%0.2f, diff=%0.2f", a1, a2, temp)
+#  rospy.loginfo("Angle Diff: a1=%0.2f, a2=%0.2f, diff=%0.2f", a1, a2, temp)
   return temp
 
 
@@ -46,13 +47,14 @@ def laserReadingToCartesianPoints(reading):
   return map(lambda rng,i: polarToCartesian(rng, laserReadingAngle(i, reading.ranges)), reading.ranges, xrange(0, len(reading.ranges)))
 
 class LaserInterpreter:
-  def __init__(self, p, c): # constructor
+  def __init__(self, p, c, cmd): # constructor
     self.compass = c
     self.position = p
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
     self.maxAngleDiff = 10.0 / r2d #should be in radians 
     self.bestMasterInliers = []
+    self.lastReading = 0
 
   def laserReadingNew(self, reading):
 #    rospy.loginfo('Laser reading received...') 
@@ -89,29 +91,39 @@ class LaserInterpreter:
 #    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
 #    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
     angle = self.compass.getOrientation(bestLine)
-#    rospy.loginfo("Raw compass angle = %0.2f", angle*r2d)
-    rospy.loginfo("Odometry: %0.2f", self.position.odomRot*r2d)
+    rospy.loginfo("Raw compass angle = %0.2f", angle*r2d)
+    rospy.loginfo("Raw/Corrected odometry:  %0.2f  %0.2f", self.position.odomRot*r2d, self.position.rotation()*r2d)
     # odomAngle
     odomAngle = self.position.rotation()
-    if abs(angle - odomAngle) < self.maxAngleDiff:  # original angle is good
+ 
+    if abs(abs(angle) - abs(odomAngle)) < self.maxAngleDiff:  # original angle is good
       angle = angle  # just perform a no-op
-    elif abs(pi - angle - odomAngle) < self.maxAngleDiff:
-      angle = pi - angle
-    elif abs(pi/2.0 + angle - odomAngle) < self.maxAngleDiff:
+    elif abs(pi - abs(angle) - abs(odomAngle)) < self.maxAngleDiff:
+      angle = abs(pi - angle)
+    elif abs(pi/2.0 + abs(angle) - abs(odomAngle)) < self.maxAngleDiff:
       angle = pi/2.0 + angle
-    elif abs(angle - pi/2.0 - odomAngle) < self.maxAngleDiff:
-      angle = angle - pi/2.0
+    elif abs(abs(angle) - pi/2.0 - abs(odomAngle)) < self.maxAngleDiff:
+      angle = abs(angle - pi/2.0)
     else:
       # if we do not find a good wall match, just use the odometric rotational delta to correct
       # the previous corrected rotation
-      rospy.loginfo("Bad reading")
       angle = self.position.rotation()  # this will just keep the same offset as before
-      if angle < 0:
-         angle = angle + 2.0 * pi
-      elif angle > 2.0 * pi:
-         angle = angle - 2.0 * pi
-    # so now angle hold the corrected angle estimate
+    # get the angle between 0 and 2pi
+    if angle < 0:
+       angle = angle + 2.0 * pi
+    elif angle > 2.0 * pi:
+       angle = angle - 2.0 * pi
+
+    # ignore readings that contradict the odometry differences
+    if self.position.odomRot > self.position.lastOdomRot and angle < self.position.rotation():
+      angle = self.position.rotation()
+    elif self.position.odomRot < self.position.lastOdomRot and angle > self.position.rotation():
+      angle = self.position.rotation()
+    
+
+    # so now angle holds the corrected angle estimate
     self.position.compassReading(angle)
+    self.lastReading = angle
 #    rospy.loginfo("Compass master wall: %0.2f, %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1])
     rospy.loginfo("Global Compass Rotation: = %0.2f",  self.position.rotation()*r2d)
 
@@ -143,7 +155,7 @@ class RobotPosition:
   def rotation(self):  # returns the rotation
     return self.offsetRot + self.odomRot
 
-
+'''
 class Commands:
   def __init__(self, rp):
     self.xGoal = 4  # 4m
@@ -153,10 +165,55 @@ class Commands:
     self.stage = 1
   def send(self):
     self.velPublish.publish(Twist(Vector3(0,0,0),Vector3(0,0,4.0/r2d)))
+'''
+
+class Commands:
+  def __init__(self, rp):
+    self.xGoal = 10                                       # 4m
+    self.thetaGoal = 180 * d2r                             #this angle has to be in radians!
+    self.rp = rp                                         # the RobotPosition
+    self.velPublish = rospy.Publisher("commands", Twist) #publish to commands
+    self.stage = 1
+    self.turning = 0
+
+  def performPartA(self):
+      #some constants
+    STRAIGHT_SPEED = 0.5
+    SLOW_TURN_SPEED = 5.0 * d2r
+    FAST_TURN_SPEED = 20.0 *d2r
+    DISTANCE_BEFORE_TURN = 2.0
+
+    xVel = 0
+    thetaVel = 0
+    laserTrans = rp.position() # current position
+    laserRot = rp.rotation() # current rotation
+    if self.stage == 1:
+      xVel = STRAIGHT_SPEED
+      if laserTrans[0] >= self.xGoal:
+        self.stage += 1
+    elif self.stage == 2:
+      xVel = 0
+      self.turning = 1
+      thetaVel = FAST_TURN_SPEED
+      if laserRot >= self.thetaGoal - 1: #turn relatively fast till we are close to the goal
+          self.stage += 1
+    elif self.stage == 3:
+      self.turning = 1
+      thetaVel = SLOW_TURN_SPEED
+      if laserRot >= self.thetaGoal - 0.01: #turn slowly as we reach the goal
+          self.stage += 1
+    elif self.stage == 4:
+      self.turning = 0
+      xVel = STRAIGHT_SPEED
+      if laserTrans[0] <= 0:
+          self.stage += 1
+    twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
+    self.velPublish.publish(twist)
     
 compass = Compass()
 rp = RobotPosition() # global RobotPosition object
-li = LaserInterpreter(rp, compass)	# global LaserInterpreter object
+cmd = Commands(rp)
+li = LaserInterpreter(rp, compass, cmd)	# global LaserInterpreter object
 
 
 def callback(reading):
@@ -169,11 +226,10 @@ def init_node():
   rospy.loginfo('"KLUDGE 1.1" node is awake')
   rospy.Subscriber("laser", LaserScan, callback, queue_size = 1) # listen to "laser"
   rospy.loginfo("Subscribed to laser readings")
-  
   odoListener = tf.TransformListener() # listen to tf
   rospy.loginfo("Subscribed to odometry frames")
   rate = rospy.Rate(10) # 10 Hz
-  cmd = Commands(rp)
+
   while not rp.initialized:
     try:
       (trans, rot) = odoListener.lookupTransform('/odom', '/base_link', rospy.Time(0))
@@ -189,7 +245,7 @@ def init_node():
 #    rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f", trans[0], trans[1], rot[2])
     rp.odomReadingNew(trans, rot)
     if compass.initialized:
-      cmd.send()
+      cmd.performPartA()
     rate.sleep()
 
 if __name__ == '__main__':
