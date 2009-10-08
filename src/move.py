@@ -1,6 +1,7 @@
 import roslib;
 import rospy
 import tf
+import numpy
 from math import *
 from line import *
 from util import *
@@ -19,6 +20,8 @@ class MoveToGoal:
         self.stage = 1 # go through 4 stages: 1. go fwd 10 feet. 2. turn around. 3.
         self.viz = LocalMapVisualizer()
         self.occGrid = OccupancyGrid(self.li)
+        self.v = 0
+        self.w = 0
 
     def setGoal(self, goalXY):
         self.goal = goalXY
@@ -45,6 +48,30 @@ class MoveToGoal:
 
     def publishNextVelocityAvoidingObstaclesOccGrid(self):
         self.occGrid.updateGrid()
+        vToGoal = self.vectorToGoal()
+        [x, y] = self.rp.origin()
+        theta = self.rp.theta()
+        
+        [newV, newW] = findBestNewVelocities(x, y, theta, self.v, self.w, 0.1, self.occGrid, vToGoal)
+
+        angularVelocity = 0
+        linearVelocity = Vector3(0,0,0)
+        
+        # stop when we are within
+        if vector_length_squared(vToGoal) > .05:
+            self.v = newV
+            self.w = newW
+            rospy.loginfo("Setting velocity to [%0.2f W to  %0.2f", self.v, r2d(self.w))
+            self.velPublish.publish(Twist(linearVelocity,Vector3(0,0,newW)))
+        else:
+            self.v = self.w = 0
+            
+        self.velPublish.publish(Twist(Vector3(self.v,0,0),Vector3(0,0,self.w)))
+
+        # otherwise if the goal is kind of far away, set the forward velocity
+        
+        
+    
     def publishNextVelocityAvoidingObstacles(self):
         # figure out which way the goal is
         vToGoal = self.vectorToGoal()
@@ -221,20 +248,22 @@ def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
 #   Takes in current x, y, theta, velocity v, angular velocity w, timestep dt, grid g
 #   Calculates a cost estimate of each new v and w value within a reasonable range
 def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
-      maxAccel = 0.5 * dt  # 0.5 was pretty much randomly chosen
+      maxAccel = 10.5 * dt  # 0.5 was pretty much randomly chosen
       maxAngularAccel = 0.5 * dt
       numIntervals = 20  # 20 x 20 sample grid = 400 test points
       minCost = 10000
       threshold = None  # no threshold to start
       bestVals = [0,0]
-      for newV in arange(v-maxAccel, v+maxAccel, 2*maxAccel/numIntervals):
-          for newW in arange(w-maxAngularAccel, w+maxAngularAccel, 2*maxAngularAccel/numIntervals):
+      for newV in numpy.arange(v-maxAccel, v+maxAccel, 2.0*maxAccel/float(numIntervals)):
+          for newW in numpy.arange(w-maxAngularAccel, w+maxAngularAccel, 2.0*maxAngularAccel/float(numIntervals)):
               newTheta = theta + newW*dt  # calculate theta after dt
               halfwayTheta = (newTheta + theta)/2.0  # find the halfway theta
               newX = x + newV*cos(halfwayTheta)*dt  # estimate the x position after dt
               newY = y + newV*sin(halfwayTheta)*dt  # estimate the y position after dt
               cost = calculateCost(newX, newY, newV, g, goal)  # calculate the cost of this position
+              rospy.loginfo("NewV/W: [%0.2f,  %0.2f degrees]. ", newV, newW)
               if cost < minCost:  # store the best cost yet found
+                  
                   minCost = cost
                   bestVals = [newV, newW]
                   if threshold and cost < threshold:  # optionally, provide a threshold to stop at
@@ -244,10 +273,11 @@ def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
 # calculateCost:
 #   Estimates the cost of a given (x,y,v) state on an occupancy grid g
 def calculateCost(x, y, v, g, goal):
-    obsCoefficient = 2.0  # Assign some multipliers for the costs
-    goalCoefficient = 3.0
+    obsCoefficient = -2.0  # Assign some multipliers for the costs
+    goalCoefficient = 9.0
     speedCoefficient = 1.0
     obsCost = g.distToNearestObstacle(x, y)
+    rospy.loginfo("Distance to nearest obstacle from [%0.2f, %0.2f]: [%0.2f]", x, y, obsCost)
     goalCost = (goal[0] - x) + (goal[1] - y)
     speedCost = 1.0 / v
     return obsCoefficient*obsCost + goalCoefficient*goalCost + speedCoefficient*speedCost
@@ -255,9 +285,9 @@ def calculateCost(x, y, v, g, goal):
 class OccupancyGrid:
     def __init__(self, li):
         self.li = li # laser interpreter
-        self.minFloat = -2
-        self.maxFloat = 2
-        self.bucketsPerDimension = 10
+        self.minFloat = -1
+        self.maxFloat = 1
+        self.bucketsPerDimension = 30
         self.grid = map (lambda x : 1, range(0, self.bucketsPerDimension * self.bucketsPerDimension))
 
     #givena  tuple containing floats, returns the value in the occupancy grid 
@@ -306,16 +336,18 @@ class OccupancyGrid:
     #   Does an inefficient search for the nearest obstance in the grid
     def distToNearestObstacle(self, startX, startY):
         queue = [ [startX, startY] ]
-        checked = { [startX, startY] : True }
+        def hashedXY(x, y):
+            return "%f-%f" % (x, y)
+        checked = { hashedXY(startX, startY) : True }
         spacing = [self.calculateSpacing(), self.calculateSpacing()]  # SYNTAX CHECK: needs the cell spacing
         while len(queue) > 0:
             [x, y] = queue.pop(0)
             
             if self.getGridValue([x, y]) < .1:  # SYNTAX CHECK: needs to check for obstacle in cell (x,y)
-                return x + y  # found an obstacle, return Manhattan distance
+                return fabs(x) + fabs(y)  # found an obstacle, return Manhattan distance
 
             for i in [-spacing[0], spacing[0]]:  # spread out from the current cell
                 for j in [-spacing[1], spacing[1]]:
-                    if not [x+i, y+j] in checked:  # check if this cell is in the dictionary
-                        queue.append[x+i, y+j]
-                        checked[ [x+i, y+j] ]= True
+                    if not hashedXY(x+i, y+j) in checked:  # check if this cell is in the dictionary
+                        queue.append([x+i, y+j])
+                        checked[ hashedXY(x+i, y+j) ]= True
