@@ -25,6 +25,11 @@ class LineModel:
         traj_cross_w = cross(self.trajectory, w)
         return vector_length(traj_cross_w) / vector_length(self.trajectory)
 
+    def distanceToPointSquared(self, pt):
+        w = vector_minus(pt, self.origin)
+        traj_cross_w = cross(self.trajectory, w)
+        return vector_length_squared(traj_cross_w) / vector_length_squared(self.trajectory)
+
     #returns the intersection of two lines
     def intersection(self, anotherLineModel):
         denom = -self.trajectory[0]*anotherLineModel.trajectory[1]+anotherLineModel.trajectory[0]*self.trajectory[1]
@@ -39,7 +44,7 @@ class LineModel:
 
 
 def fitLineWithRansac(points, distance_cutoff):
-    [best_model, best_inliers] = ransac(points, 2, LineModel, lambda model, pt: model.distanceToPoint(pt) < distance_cutoff)
+    [best_model, best_inliers] = ransac(points, 2, LineModel, lambda model, pt: model.distanceToPointSquared(pt) < (distance_cutoff * distance_cutoff))
     return [best_model, best_inliers]
 
     

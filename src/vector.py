@@ -28,7 +28,13 @@ def vector_length(v):
     for x in v:
         sum = sum + x*x
     return sum ** 0.5
-    
+
+def vector_length_squared(v):
+    sum = 0
+    for x in v:
+        sum = sum + x*x
+    return sum
+
 def normalize(v):
     l = vector_length(v)
     return map(lambda x : x / l, v)
