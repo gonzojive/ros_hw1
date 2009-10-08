@@ -201,3 +201,65 @@ class MoveToGoal:
             
         # otherwise if the goal is kind of far away, set the forward velocity
         self.velPublish.publish(Twist(linearVelocity,Vector3(0,0,angularVelocity)))
+
+def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
+    # f prefix float i discrete
+    fSizeOfBucket = float(maxFloat - minFloat) / float(numBuckets)
+    iBucket = int( float(f - minFloat) / fSizeOfBucket)
+    if iBucket < 0:
+        return 0
+    elif iBucket >= numBuckets:
+        return numBuckets - 1
+    else:
+        return iBucket
+            
+
+class OccupancyGrid:
+    def __init__(self, li):
+        self.li = li # laser interpreter
+        self.minFloat = -2
+        self.maxFloat = 2
+        self.bucketsPerDimension = 10
+        self.grid = map (lambda x : 1, range(0, self.bucketsPerDimension * self.bucketsPerDimension))
+
+    #givena  tuple containing floats, returns the value in the occupancy grid 
+    def getGridValue(self, point):
+        [x, y] = self.pointToBucketXY(point)
+        return self.getBucketValue( x, y)
+    
+    def setGridValue(self, point, value):
+        [x, y] = self.pointToBucketXY(point)
+        self.setBucketValue(x, y, value)
+                                                                                                            # returns integer [x, y] of the bucket that corresponds to the given floating point values
+    def setBucketValue(self, x, y, value):
+        self.grid[x * self.bucketsPerDimension + y] = value
+        
+    def getBucketValue(self, x, y):
+        return self.grid[x * self.bucketsPerDimension + y]
+
+    def pointToBucketXY(self, pt):
+        [x, y] = pt
+        # if we are looking for -2 1 in a grid, we would return 
+        xBucket = mapFloatIntoDiscretizedBucket(x, self.minFloat, self.maxFloat, self.bucketsPerDimension)
+        yBucket = mapFloatIntoDiscretizedBucket(y, self.minFloat, self.maxFloat, self.bucketsPerDimension)
+        return [xBucket, yBucket]
+
+    def calcualteSpacing(self):
+        return float(self.maxValue - self.minValue) / float(self.bucketsPerDimension)
+
+    # update the grid with the laser scan info
+    def updateGrid(self):
+        step = self.calculateSpacing()
+        for iX in range(0, self.bucketsPerDimension):
+            fX = float(iX) + step * .5 + self.minFloat
+            for iY in range(0, self.bucketsPerDimension):
+                fY = float(iY) + step * .5 + self.minFloat
+                if fY > 0 and True:
+                    vec = [fX, fY]
+                    cast_distance = self.li.castVector(vec)
+                    # 0 weight for 
+                    gridVal = 0.0
+                    if cast_distance * cast_distance > vector_length_squared(vec):
+                        gridVal = 1.0
+                    setGridValue(vec, gridVal)
+
