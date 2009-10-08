@@ -18,6 +18,7 @@ class MoveToGoal:
         self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
         self.stage = 1 # go through 4 stages: 1. go fwd 10 feet. 2. turn around. 3.
         self.viz = LocalMapVisualizer()
+        self.occGrid = OccupancyGrid(self.li)
 
     def setGoal(self, goalXY):
         self.goal = goalXY
@@ -42,6 +43,8 @@ class MoveToGoal:
     def maxLinearVelocity(self):
         return .5 # half a meter per second
 
+    def publishNextVelocityAvoidingObstaclesOccGrid(self):
+        self.occGrid.updateGrid()
     def publishNextVelocityAvoidingObstacles(self):
         # figure out which way the goal is
         vToGoal = self.vectorToGoal()
@@ -150,7 +153,8 @@ class MoveToGoal:
             self.velPublish.publish(Twist(Vector3(.2,0,0),Vector3(0,0,0)))
             return
         else:
-            self.publishNextVelocityAvoidingObstacles()
+            #self.publishNextVelocityAvoidingObstacles()
+            self.publishNextVelocityAvoidingObstaclesOccGrid()
             return
             
         
@@ -212,7 +216,41 @@ def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
         return numBuckets - 1
     else:
         return iBucket
-            
+
+# findBestNewVelocities:
+#   Takes in current x, y, theta, velocity v, angular velocity w, timestep dt, grid g
+#   Calculates a cost estimate of each new v and w value within a reasonable range
+def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
+      maxAccel = 0.5 * dt  # 0.5 was pretty much randomly chosen
+      maxAngularAccel = 0.5 * dt
+      numIntervals = 20  # 20 x 20 sample grid = 400 test points
+      minCost = 10000
+      threshold = None  # no threshold to start
+      bestVals = [0,0]
+      for newV in arange(v-maxAccel, v+maxAccel, 2*maxAccel/numIntervals):
+          for newW in arange(w-maxAngularAccel, w+maxAngularAccel, 2*maxAngularAccel/numIntervals):
+              newTheta = theta + newW*dt  # calculate theta after dt
+              halfwayTheta = (newTheta + theta)/2.0  # find the halfway theta
+              newX = x + newV*cos(halfwayTheta)*dt  # estimate the x position after dt
+              newY = y + newV*sin(halfwayTheta)*dt  # estimate the y position after dt
+              cost = calculateCost(newX, newY, newV, g, goal)  # calculate the cost of this position
+              if cost < minCost:  # store the best cost yet found
+                  minCost = cost
+                  bestVals = [newV, newW]
+                  if threshold and cost < threshold:  # optionally, provide a threshold to stop at
+                      return bestVals
+      return bestVals
+
+# calculateCost:
+#   Estimates the cost of a given (x,y,v) state on an occupancy grid g
+def calculateCost(x, y, v, g, goal):
+    obsCoefficient = 2.0  # Assign some multipliers for the costs
+    goalCoefficient = 3.0
+    speedCoefficient = 1.0
+    obsCost = g.distToNearestObstacle(x, y)
+    goalCost = (goal[0] - x) + (goal[1] - y)
+    speedCost = 1.0 / v
+    return obsCoefficient*obsCost + goalCoefficient*goalCost + speedCoefficient*speedCost
 
 class OccupancyGrid:
     def __init__(self, li):
@@ -244,8 +282,8 @@ class OccupancyGrid:
         yBucket = mapFloatIntoDiscretizedBucket(y, self.minFloat, self.maxFloat, self.bucketsPerDimension)
         return [xBucket, yBucket]
 
-    def calcualteSpacing(self):
-        return float(self.maxValue - self.minValue) / float(self.bucketsPerDimension)
+    def calculateSpacing(self):
+        return float(self.maxFloat - self.minFloat) / float(self.bucketsPerDimension)
 
     # update the grid with the laser scan info
     def updateGrid(self):
@@ -261,5 +299,23 @@ class OccupancyGrid:
                     gridVal = 0.0
                     if cast_distance * cast_distance > vector_length_squared(vec):
                         gridVal = 1.0
-                    setGridValue(vec, gridVal)
+                    self.setGridValue(vec, gridVal)
 
+    # distToNearestObstacle:
+    #   An occupancy grid function - probably want this in the class
+    #   Does an inefficient search for the nearest obstance in the grid
+    def distToNearestObstacle(self, startX, startY):
+        queue = [ [startX, startY] ]
+        checked = { [startX, startY] : True }
+        spacing = [self.calculateSpacing(), self.calculateSpacing()]  # SYNTAX CHECK: needs the cell spacing
+        while len(queue) > 0:
+            [x, y] = queue.pop(0)
+            
+            if self.getGridValue([x, y]) < .1:  # SYNTAX CHECK: needs to check for obstacle in cell (x,y)
+                return x + y  # found an obstacle, return Manhattan distance
+
+            for i in [-spacing[0], spacing[0]]:  # spread out from the current cell
+                for j in [-spacing[1], spacing[1]]:
+                    if not [x+i, y+j] in checked:  # check if this cell is in the dictionary
+                        queue.append[x+i, y+j]
+                        checked[ [x+i, y+j] ]= True
