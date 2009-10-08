@@ -23,6 +23,7 @@ def polarToCartesian(r, theta):
   y = r * sin(theta)
   return [y, -x]
 
+
 def angleDifferenceRadians(a1, a2):  # returns angle difference in the range [0,2pi]
   temp = a2-a1
   while temp > 2*pi:
@@ -31,7 +32,7 @@ def angleDifferenceRadians(a1, a2):  # returns angle difference in the range [0,
     temp += 2*pi
   rospy.loginfo("Angle Diff: a1=%0.2f, a2=%0.2f, diff=%0.2f", a1, a2, temp)
   return temp
-  
+
 
 # Given a bunch of laser readings
 def laserReadingAngle(i, readingRanges):
@@ -50,12 +51,12 @@ class LaserInterpreter:
     self.position = p
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
-    self.maxAngleDiff = 10.0 / r2d
+    self.maxAngleDiff = 10.0 / r2d #should be in radians 
     self.bestMasterInliers = []
 
   def laserReadingNew(self, reading):
 #    rospy.loginfo('Laser reading received...') 
-    self.logReadingInfo(reading) 
+#    self.logReadingInfo(reading) 
     # Do some processing on the new laser reading
     if self.doRansac >= 1:
       self.ransac(reading)
@@ -82,19 +83,19 @@ class LaserInterpreter:
     temp = time.time()
 #    rospy.loginfo("Starting RANSAC")
     [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
-    #realign ourselves against a particularly well-fit wall if necessary
-    #self.maybeRealignAgainstWall(bestLine, inliers)
-#    rospy.loginfo("Done in %f seconds", time.time()-temp)
-#    self.mapviz.vizPoints(inliers)
+   
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
 #    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
 #    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
     angle = self.compass.getOrientation(bestLine)
+#    rospy.loginfo("Raw compass angle = %0.2f", angle*r2d)
     rospy.loginfo("Odometry: %0.2f", self.position.odomRot*r2d)
     # odomAngle
     odomAngle = self.position.rotation()
-    if abs(pi - angle - odomAngle) < self.maxAngleDiff:
+    if abs(angle - odomAngle) < self.maxAngleDiff:  # original angle is good
+      angle = angle  # just perform a no-op
+    elif abs(pi - angle - odomAngle) < self.maxAngleDiff:
       angle = pi - angle
     elif abs(pi/2.0 + angle - odomAngle) < self.maxAngleDiff:
       angle = pi/2.0 + angle
@@ -103,15 +104,16 @@ class LaserInterpreter:
     else:
       # if we do not find a good wall match, just use the odometric rotational delta to correct
       # the previous corrected rotation
-      angle = self.position.rotation() + (self.position.odomRot - self.position.lastOdomRot)
+      rospy.loginfo("Bad reading")
+      angle = self.position.rotation()  # this will just keep the same offset as before
       if angle < 0:
          angle = angle + 2.0 * pi
       elif angle > 2.0 * pi:
          angle = angle - 2.0 * pi
     # so now angle hold the corrected angle estimate
     self.position.compassReading(angle)
-    rospy.loginfo("Compass master wall: %0.2f, %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1])
-    rospy.loginfo("Global Compas.  Rotation: = %0.2f Angle = %0.2f",  self.position.rotation()*r2d,  angle * r2d)
+#    rospy.loginfo("Compass master wall: %0.2f, %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1])
+    rospy.loginfo("Global Compass Rotation: = %0.2f",  self.position.rotation()*r2d)
 
 
 class RobotPosition:
@@ -125,13 +127,13 @@ class RobotPosition:
     self.lastOdomRot = 0 # last reading of the odometer's rotation
   def resetOdom(self, t, r):  # resets the odometry offsets
     self.odomTrans0 = t
-    self.odomRot0 = acos(r[3])*2
+    self.odomRot0 = math.acos(r[3])*2
   def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
     [self.lastOdomTrans[0], self.lastOdomTrans[1]] = self.odomTrans
     self.lastOdomRot = self.odomRot
     self.odomTrans[0] = t[0] - self.odomTrans0[0]
     self.odomTrans[1] = t[1] - self.odomTrans0[1]
-    self.odomRot = acos(r[3])*2 - self.odomRot0
+    self.odomRot = math.acos(r[3])*2 - self.odomRot0
   # set the compas given a corrected rotation value
   def compassReading(self, correctedRotation):  # take in a new compass reading
     # offset Rot gives the difference between the robot's true rotation and what the odom tells us it is
@@ -158,7 +160,7 @@ li = LaserInterpreter(rp, compass)	# global LaserInterpreter object
 
 
 def callback(reading):
-  rospy.loginfo("Laser reading number %d", reading.header.seq)
+#  rospy.loginfo("Laser reading number %d", reading.header.seq)
   li.laserReadingNew(reading)
 
 
