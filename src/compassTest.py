@@ -51,6 +51,7 @@ class LaserInterpreter:
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
     self.maxAngleDiff = 10.0 / r2d
+    self.bestMasterInliers = []
 
   def laserReadingNew(self, reading):
 #    rospy.loginfo('Laser reading received...') 
@@ -65,6 +66,14 @@ class LaserInterpreter:
     for r in reading.ranges:
       print r
 
+  #realign ourselves against a particularly well-fit wall if necessary
+  def maybeRealignAgainstWall(self, wallLine, inliers):
+    if len(inliers) > len(self.bestMasterInliers):
+       rospy.loginfo("Setting new master wall with %d inliers", len(inliers))
+       # set the global compass to use this as the master
+       self.compass.setMaster(wallLine)
+       self.bestMasterInliers = inliers
+
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading)
 #    self.mapviz.vizPoints(cartesianPoints)
@@ -73,6 +82,8 @@ class LaserInterpreter:
     temp = time.time()
 #    rospy.loginfo("Starting RANSAC")
     [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
+    #realign ourselves against a particularly well-fit wall if necessary
+    #self.maybeRealignAgainstWall(bestLine, inliers)
 #    rospy.loginfo("Done in %f seconds", time.time()-temp)
 #    self.mapviz.vizPoints(inliers)
     def s(arr):
@@ -99,6 +110,7 @@ class LaserInterpreter:
          angle = angle - 2.0 * pi
     # so now angle hold the corrected angle estimate
     self.position.compassReading(angle)
+    rospy.loginfo("Compass master wall: %0.2f, %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1])
     rospy.loginfo("Global Compas.  Rotation: = %0.2f Angle = %0.2f",  self.position.rotation()*r2d,  angle * r2d)
 
 
@@ -107,10 +119,10 @@ class RobotPosition:
     self.initialized = False  # can't start until we initialize odometry
     self.odomTrans = [0,0]  
     self.odomRot = 0
-    self.offsetTrans = [0,0]
-    self.offsetRot = 0
-    self.lastOdomTrans = [0,0]
-    self.lastOdomRot = 0
+    self.offsetTrans = [0,0] # this is equal to the offset of 
+    self.offsetRot = 0 # this is equal to our true rotation - the odometer's rotation
+    self.lastOdomTrans = [0,0] # last reading of the odometer's XY
+    self.lastOdomRot = 0 # last reading of the odometer's rotation
   def resetOdom(self, t, r):  # resets the odometry offsets
     self.odomTrans0 = t
     self.odomRot0 = acos(r[3])*2
@@ -120,6 +132,7 @@ class RobotPosition:
     self.odomTrans[0] = t[0] - self.odomTrans0[0]
     self.odomTrans[1] = t[1] - self.odomTrans0[1]
     self.odomRot = acos(r[3])*2 - self.odomRot0
+  # set the compas given a corrected rotation value
   def compassReading(self, correctedRotation):  # take in a new compass reading
     # offset Rot gives the difference between the robot's true rotation and what the odom tells us it is
     self.offsetRot = correctedRotation - self.odomRot  # make the offset take it to the real angle
