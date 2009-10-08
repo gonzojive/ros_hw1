@@ -1,5 +1,7 @@
 from line import LineModel
 
+# Gives the angle between the master wall and the current wall we are looking at
+# master wall is some super great reference wall that we know is rectalinear
 class Compass:
   def __init__(self):
     self.master = None

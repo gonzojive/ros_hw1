@@ -44,4 +44,10 @@ def vector_dot(v,w):
 
 def vector_angle(v, w):
     dot_result =  vector_dot(v,w)
-    return math.acos(dot_result)
+    
+    try:
+	result = math.acos(dot_result)
+ 	return result
+    except:
+        # math domain error
+	return 0
