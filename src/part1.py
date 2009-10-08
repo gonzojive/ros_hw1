@@ -140,7 +140,7 @@ class Commands:
     self.thetaGoal = 180  # 180 degrees
     self.rp = rp  # the RobotPosition
     self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
-    self.stage = 1
+    self.stage = 1 # go through 4 stages: 1. go fwd 10 feet. 2. turn around. 3. 
   def send(self):
     self.velPublish.publish(Twist(Vector3(0,0,0),Vector3(0,0,4.0/r2d)))
     '''    
