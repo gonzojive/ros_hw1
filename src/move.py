@@ -20,35 +20,43 @@ class MoveToGoal:
 
     def setGoal(self, goalXY):
         self.goal = goalXY
+
     # this is called by the main update loop of the program.  It uses the robot global compass
     # and laser interpreter to figure out where the obstacles are and move around
     def publishNextMovement(self):
         if not self.goal:
+            # by default just move forward
+            self.velPublish.publish(Twist(Vector3(.2,0,0),Vector3(0,0,0)))
             return
-        fwd = self.rp.forwardVector()
-        
-        linearVel = Vector3(0,0,0)
-        angularVel = Vector3(0,0,4.0/r2d)
-        
-        self.velPublish.publish(Twist(Vector3(0,0,0),Vector3(0,0,4.0/r2d)))
-        xVel = 0
-        thetaVel = 0
-        if self.stage == 1:  # haven't gone forward enough
-            xVel = 0.5
-        if rp.trans[0] >= self.xGoal:
-            self.stage += 1
-        elif self.stage == 2:  # haven't turned enough
-            thetaVel = 10.0/r2d  # turn 10 degrees (per second?)
-            if rp.rot >= self.thetaGoal - 1:
-                self.stage += 1
-        elif self.stage == 3:
-            thetaVel = 1.0/r2d
-            if rp.rot >= self.thetaGoal - 0.01:
-                self.stage += 1
-        elif self.stage == 4:
-            xVel = 0.5
-            if rp.trans[0] <= 0:
-                self.stage += 1
-        twist = Twist(Vector3(xVel, 0, 0), Vector3(0, 0, thetaVel))
-        self.velPublish.publish(twist)
 
+        # variables with a v prefix are vectors
+
+        vOrigin = self.rp.origin()
+        # figure out the robot position
+        vForward = self.rp.forwardVector()
+        
+        # figure out the vector to the goal
+        vToGoal = vector_minus(self.goal, vOrigin)
+
+        # determine the angle between the the forward vector and the v
+        signedAngleToGoal = vector_angle_signed(vForward, vToGoal)
+
+        MAX_ANGULAR_VELOCITY = d2r(10.0)
+        MAX_LINEAR_VELOCITY = .50 # 50 cm
+
+        angularVelocity = 0
+        linearVelocity = Vector3(0,0,0)
+        # if the angle is off by more than 5 degrees, just rotate
+        if math.fabs(signedAngleToGoal) > d2r(5.0):
+            angularVelocity = signedAngleToGoal
+            if math.fabs(signedAngleToGoal) > MAX_ANGULAR_VELOCITY:
+               sign = (signedAngleToGoal >= 0 and 1.0) or -1.0
+               angularVelocity = MAX_ANGULAR_VELOCITY * sign
+        elif vector_length_squared(vToGoal) > .5:
+            vVel = vToGoal
+            if vector_length_squared(vVel) > MAX_LINEAR_VELOCITY:
+                vVel = vector_scale(vector_normalize(vVel), MAX_LINEAR_VELOCITY)
+            linearVelocity = Vector3(vVel[0],vVel[1],0)
+            
+        # otherwise if the goal is kind of far away, set the forward velocity
+        self.velPublish.publish(Twist(linearVelocity,Vector3(0,0,angularVelocity)))

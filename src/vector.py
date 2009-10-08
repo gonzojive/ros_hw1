@@ -62,3 +62,21 @@ def vector_angle(v, w):
 
 def vector_angle_general(v, w):
     return vector_angle_normalized(normalize(v),normalize(w))
+
+def vector_angle_signed(v, w):
+    #return math.atan2(w[1] - v[1], w[0] - v[0])
+    
+    ang = atan2(v[1],v[0]) -     atan2(w[1],w[0])
+    # we are in a right-handed system so return the opposite sign
+    return ang * -1.0
+
+    #z = [
+    #signed_angle = atan2(  N * ( V1 x V2 ), V1 * V2  );
+    # where * is dot product and x is cross product
+    # N is the normal to the polygon
+    # ALL vectors: N, V1, V2 must be normalized
+
+    #sign = (vector_dot(
+    #    c = cross(y,z);
+    #     angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));
+    #3angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));

@@ -81,8 +81,9 @@ class Part2:
             rate.sleep()
 
 
-if __name__ == '__main__' and None:
+if __name__ == '__main__':
   try:
-    init_node()
+      app = Part2()
+      app.initNode()
   except rospy.ROSInterruptException:
     pass
