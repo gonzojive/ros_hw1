@@ -27,7 +27,7 @@ def vector_length(v):
     sum = 0
     for x in v:
         sum = sum + x*x
-    return sum ** 0.5
+    return math.sqrt(sum)
 
 def vector_length_squared(v):
     sum = 0
@@ -39,10 +39,14 @@ def normalize(v):
     l = vector_length(v)
     return map(lambda x : x / l, v)
 
+def vector_normalize(v):
+    l = vector_length(v)
+    return map(lambda x : x / l, v)
+
 def vector_dot(v,w):
     return sum(map( lambda a,b: a * b, v, w))
 
-def vector_angle(v, w):
+def vector_angle_normalized(v, w):
     dot_result =  vector_dot(v,w)
     
     try:
@@ -51,3 +55,10 @@ def vector_angle(v, w):
     except:
         # math domain error
 	return 0
+
+#oddly, this assumes normalized angles
+def vector_angle(v, w):
+    return vector_angle_normalized(v, w)
+
+def vector_angle_general(v, w):
+    return vector_angle_normalized(normalize(v),normalize(w))
