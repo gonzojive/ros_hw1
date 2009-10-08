@@ -6,6 +6,7 @@ from math import *
 from line import *
 from lineviz import *
 from compass import *
+import time
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Vector3
@@ -36,32 +37,46 @@ def laserReadingToCartesianPoints(reading):
 class LaserInterpreter:
   def __init__(self, p, c): # constructor
     self.compass = c
-#    self.position = p
+    self.position = p
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
 
   def laserReadingNew(self, reading):
-    rospy.loginfo('Laser reading received...')  
+#    rospy.loginfo('Laser reading received...') 
+    self.logReadingInfo(reading) 
     # Do some processing on the new laser reading
     if self.doRansac >= 1:
       self.ransac(reading)
 
   def logReadingInfo(self, reading):
-    rospy.loginfo("Min: %d  Max: %d  Inc: %f  Len: %d", r2d*reading.angle_min, r2d*reading.angle_max, r2d*reading.angle_increment, len(reading.ranges))
-    print reading.ranges[-1], reading.ranges[len(reading.ranges)/2], reading.ranges[0]
+#    rospy.loginfo("Min: %d  Max: %d  Inc: %f  Len: %d", r2d*reading.angle_min, r2d*reading.angle_max, r2d*reading.angle_increment, len(reading.ranges))
+    rospy.loginfo("Last: %0.2f  Middle: %0.2f  First: %0.2f ", reading.ranges[-1], reading.ranges[len(reading.ranges)/2], reading.ranges[0])
+    for r in reading.ranges:
+      print r
 
   def ransac(self, reading):
     cartesianPoints = laserReadingToCartesianPoints(reading)
-    for pt in cartesianPoints:
-      rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
+#    self.mapviz.vizPoints(cartesianPoints)
+#    for pt in cartesianPoints:
+#      rospy.loginfo("(%0.2f, %0.2f)", pt[0], pt[1])
+    temp = time.time()
+#    rospy.loginfo("Starting RANSAC")
     [bestLine, inliers] = fitLineWithRansac(cartesianPoints, .03)
-    self.mapviz.vizPoints(inliers)
+#    rospy.loginfo("Done in %f seconds", time.time()-temp)
+#    self.mapviz.vizPoints(inliers)
     def s(arr):
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
-    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
+#    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
 #    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
-    angle = self.compass.getOrientation(bestLine)
-    rospy.loginfo("Compass reading: MasterD = (%0.2f, %0.2f)  Angle = %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1], angle*r2d)
+    angle = self.compass.getOrientation(bestLine)*r2d
+    rospy.loginfo("Odometry: %0.2f", self.position.rotation()*r2d)
+    odomAngle = self.position.rotation()*r2d
+    minAng = 4000
+    for i in range(-1,2):
+      if abs(angle +math.pi*i - odomAngle) < minAng:
+        offset = i
+        minAng = angle +math.pi*i - odomAngle
+    rospy.loginfo("Compass reading: MasterD = (%0.2f, %0.2f)  Angle = %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1], minAng)
 
 
 class RobotPosition:
@@ -109,17 +124,19 @@ li = LaserInterpreter(rp, compass)	# global LaserInterpreter object
 
 
 def callback(reading):
+  rospy.loginfo("Laser reading number %d", reading.header.seq)
   li.laserReadingNew(reading)
+
 
 def init_node():
   rospy.init_node('kludge1_1')
   rospy.loginfo('"KLUDGE 1.1" node is awake')
-  rospy.Subscriber("laser", LaserScan, callback) # listen to "laser"
+  rospy.Subscriber("laser", LaserScan, callback, queue_size = 1) # listen to "laser"
   rospy.loginfo("Subscribed to laser readings")
   
   odoListener = tf.TransformListener() # listen to tf
   rospy.loginfo("Subscribed to odometry frames")
-  rate = rospy.Rate(10.0) # 10 Hz
+  rate = rospy.Rate(2.0) # 10 Hz
   cmd = Commands(rp)
   while not rp.initialized:
     try:

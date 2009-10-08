@@ -132,6 +132,8 @@ class RobotPosition:
     rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
     
 
+compass = Compass()
+
 class Commands:
   def __init__(self, rp):
     self.xGoal = 4  # 4m
@@ -140,6 +142,7 @@ class Commands:
     self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
     self.stage = 1
   def send(self):
+    self.velPublish.publish(Twist(Vector3(0,0,0),Vector3(0,0,4.0/r2d)))
     '''    
     xVel = 0
     thetaVel = 0
