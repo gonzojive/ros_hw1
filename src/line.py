@@ -14,6 +14,8 @@ class LineModel:
         a_to_b = map(lambda acoord, bcoord: bcoord - acoord, a, b)
         self.origin = a
         self.trajectory = normalize(a_to_b)
+	if self.trajectory[1] < 0:
+	   self.trajectory = vector_scale(self.trajectory, -1.0)
 
     #returns the angle between two lines
     def angleBetween(self, anotherLineModel):

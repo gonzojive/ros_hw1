@@ -12,4 +12,4 @@ class Compass:
     if self.master == None:
       self.setMaster(line)
       return 0
-    return line.angleBetween(self.master)
+    return abs(line.angleBetween(self.master))

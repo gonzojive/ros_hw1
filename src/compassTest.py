@@ -23,6 +23,16 @@ def polarToCartesian(r, theta):
   y = r * sin(theta)
   return [y, -x]
 
+def angleDifferenceRadians(a1, a2):  # returns angle difference in the range [0,2pi]
+  temp = a2-a1
+  while temp > 2*pi:
+    temp -= 2*pi
+  while temp < 0:
+    temp += 2*pi
+  rospy.loginfo("Angle Diff: a1=%0.2f, a2=%0.2f, diff=%0.2f", a1, a2, temp)
+  return temp
+  
+
 # Given a bunch of laser readings
 def laserReadingAngle(i, readingRanges):
   num_scan_points = len(readingRanges)
@@ -40,6 +50,7 @@ class LaserInterpreter:
     self.position = p
     self.doRansac = 1
     self.mapviz = LocalMapVisualizer()
+    self.maxAngleDiff = 10.0 / r2d
 
   def laserReadingNew(self, reading):
 #    rospy.loginfo('Laser reading received...') 
@@ -68,15 +79,27 @@ class LaserInterpreter:
       return "[%0.2f, %0.2f]" % (arr[0], arr[1])
 #    rospy.loginfo("Line: %s trajectory: %s" % (s(bestLine.origin),  s(bestLine.trajectory)))
 #    rospy.loginfo("  %i Inliers of %i readings: %s" % (len(inliers), len(reading.ranges), map(s, inliers)))
-    angle = self.compass.getOrientation(bestLine)*r2d
-    rospy.loginfo("Odometry: %0.2f", self.position.rotation()*r2d)
-    odomAngle = self.position.rotation()*r2d
-    minAng = 4000
-    for i in range(-1,2):
-      if abs(angle +math.pi*i - odomAngle) < minAng:
-        offset = i
-        minAng = angle +math.pi*i - odomAngle
-    rospy.loginfo("Compass reading: MasterD = (%0.2f, %0.2f)  Angle = %0.2f", self.compass.master.trajectory[0], self.compass.master.trajectory[1], minAng)
+    angle = self.compass.getOrientation(bestLine)
+    rospy.loginfo("Odometry: %0.2f", self.position.odomRot*r2d)
+    # odomAngle
+    odomAngle = self.position.rotation()
+    if abs(pi - angle - odomAngle) < self.maxAngleDiff:
+      angle = pi - angle
+    elif abs(pi/2.0 + angle - odomAngle) < self.maxAngleDiff:
+      angle = pi/2.0 + angle
+    elif abs(angle - pi/2.0 - odomAngle) < self.maxAngleDiff:
+      angle = angle - pi/2.0
+    else:
+      # if we do not find a good wall match, just use the odometric rotational delta to correct
+      # the previous corrected rotation
+      angle = self.position.rotation() + (self.position.odomRot - self.position.lastOdomRot)
+      if angle < 0:
+         angle = angle + 2.0 * pi
+      elif angle > 2.0 * pi:
+         angle = angle - 2.0 * pi
+    # so now angle hold the corrected angle estimate
+    self.position.compassReading(angle)
+    rospy.loginfo("Global Compas.  Rotation: = %0.2f Angle = %0.2f",  self.position.rotation()*r2d,  angle * r2d)
 
 
 class RobotPosition:
@@ -86,26 +109,24 @@ class RobotPosition:
     self.odomRot = 0
     self.offsetTrans = [0,0]
     self.offsetRot = 0
+    self.lastOdomTrans = [0,0]
+    self.lastOdomRot = 0
   def resetOdom(self, t, r):  # resets the odometry offsets
     self.odomTrans0 = t
-    self.odomRot0 = r[2]
+    self.odomRot0 = acos(r[3])*2
   def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
+    [self.lastOdomTrans[0], self.lastOdomTrans[1]] = self.odomTrans
+    self.lastOdomRot = self.odomRot
     self.odomTrans[0] = t[0] - self.odomTrans0[0]
     self.odomTrans[1] = t[1] - self.odomTrans0[1]
-    self.odomRot = r[2] - self.odomRot0
-  def compassReading(self, angles):  # take in a new compass reading
-    realAngle = 0
-    minDiff = 1000
-    for a in angles:
-      if abs(self.rotation()-a) < minDiff:  # closest angle so far
-        realAngle = a
-    self.offsetRot = realAngle - self.rotation()  # make the offset take it to the real angle
+    self.odomRot = acos(r[3])*2 - self.odomRot0
+  def compassReading(self, correctedRotation):  # take in a new compass reading
+    # offset Rot gives the difference between the robot's true rotation and what the odom tells us it is
+    self.offsetRot = correctedRotation - self.odomRot  # make the offset take it to the real angle
   def position(self):  # returns the position
     return [self.offsetTrans[0]+self.odomTrans[0], self.offsetTrans[1]+self.odomTrans[1]]
   def rotation(self):  # returns the rotation
     return self.offsetRot + self.odomRot
-  def logPosInfo(self):
-    rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
 
 
 class Commands:
@@ -136,7 +157,7 @@ def init_node():
   
   odoListener = tf.TransformListener() # listen to tf
   rospy.loginfo("Subscribed to odometry frames")
-  rate = rospy.Rate(2.0) # 10 Hz
+  rate = rospy.Rate(10) # 10 Hz
   cmd = Commands(rp)
   while not rp.initialized:
     try:

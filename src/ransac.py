@@ -1,7 +1,7 @@
 import random
 import math
 
-RANSAC_ITERATIONS = 10
+RANSAC_ITERATIONS = 15
 
 # given some points, randomly chooses num_points_necessary_for_fit 500 or so
 # times.  At each iteration model_callback is called taking as an argument a
