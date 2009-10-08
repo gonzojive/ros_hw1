@@ -8,6 +8,10 @@ from vector import *
 from lineviz import *
 from walls import *
 
+class RedGlobalCompass:
+    def __init__(self):
+        self.walls = []
+
 class RobotPosition:
     def __init__(self):
         self.initialized = False  # can't start until we initialize odometry
@@ -50,6 +54,51 @@ class RobotPosition:
     def logPosInfo(self):
         rospy.loginfo("Odometry: (%0.2f, %0.2f) at xxx degrees", self.odomTrans[0], self.odomTrans[1])
 
+def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
+    # f prefix float i discrete
+    fSizeOfBucket = float(maxFloat - minFloat) / float(numBuckets)
+    iBucket = int( float(f - minFloat) / fSizeOfBucket)
+    if iBucket < 0:
+        return 0
+    elif iBucket >= numBuckets:
+        return numBuckets - 1
+    else:
+        return iBucket
+            
+
+class OccupancyGrid:
+    def __init__(self, li):
+        self.li = li # laser interpreter
+        self.minFloat = -2
+        self.maxFloat = 2
+        self.bucketsPerDimension = 10
+        self.grid = map (lambda x : 1, range(0, self.bucketsPerDimension * self.bucketsPerDimension))
+
+    #givena  tuple containing floats, returns the value in the occupancy grid 
+    def getGridValue(self, point):
+        [x, y] = self.pointToBucketXY(point)
+        return self.getBucketValue( x, y)
+    
+    def setGridValue(self, point, value):
+        [x, y] = self.pointToBucketXY(point)
+        self.setBucketValue(x, y, value)
+                                                                                                            # returns integer [x, y] of the bucket that corresponds to the given floating point values
+    def setBucketValue(self, x, y, value):
+        self.grid[x * self.bucketsPerDimension + y] = value
+        
+    def getBucketValue(self, x, y):
+        return self.grid[x * self.bucketsPerDimension + y]
+
+    def pointToBucketXY(self, pt):
+        [x, y] = pt
+        # if we are looking for -2 1 in a grid, we would return 
+        xBucket = mapFloatIntoDiscretizedBucket(x, self.minFloat, self.maxFloat, self.bucketsPerDimension)
+        yBucket = mapFloatIntoDiscretizedBucket(y, self.minFloat, self.maxFloat, self.bucketsPerDimension)
+        return [xBucket, yBucket]
+
+    # update the grid with the laser
+    def updateGrid(self):
+        None
 
 # assuming the laser is 180 degrees, returns what angle the ith laser reading is
 # given an array of laser ranges (which are arranged left to right)
@@ -86,7 +135,7 @@ class LaserInterpreter:
     # the global position
     def laserReadingNew(self, reading):
         # Do some processing on the new laser reading
-        self.latestreading = reading
+        self.latestReading = reading
         # update the global compass!
         self.findWallsAndUpdateGlobalCompass(reading)
 
@@ -100,9 +149,11 @@ class LaserInterpreter:
     # casts a ray in the given polar direction and returns how far away an object is
     # in that direction
     def castRayPolar(self, theta):
+        if not self.latestReading:
+            return 0
         theta = normalizeAngle360(theta)
         numBuckets = len(self.latestReading.ranges)
-        radiansPerLaserReadingRange = pi / numBuckets
+        radiansPerLaserReadingRange = pi / float(numBuckets)
         # figure out which bucket it would be in if the readings were stored right to left
         bucketRightToLeft = int(theta / radiansPerLaserReadingRange)
         # now reverse that
@@ -113,7 +164,9 @@ class LaserInterpreter:
         elif bucketLeftToRight < 0:
             bucketLeftToRight = 0
         # return that range.  simple and stupid
-        return self.latestReading.ranges[bucketLeftToRight]
+        rng = self.latestReading.ranges[bucketLeftToRight]
+        #rospy.loginfo("For angle %0.2f bucket %d range %0.2f", r2d(theta), bucketLeftToRight, rng)
+        return rng
             
         
     def logReadingInfo(self, reading):
