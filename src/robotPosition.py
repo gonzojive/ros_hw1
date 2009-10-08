@@ -17,15 +17,17 @@ class RobotPosition:
         self.mapRot = 0
     def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
         self.odomTrans0 = t
-        self.odomRot0 = r[2]
+        self.odomRot0 = math.acos(r[3])*2.0
     def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
         self.odomTrans[0] = t[0] - self.odomTrans0[0]
         self.odomTrans[1] = t[1] - self.odomTrans0[1]
-        self.odomRot = (r[2] - self.odomRot0) * 180.0
+        self.odomRot = (math.acos(r[3])*2.0 - self.odomRot0)
+        self.logPosInfo()
     def mapPositionNew(self, mapT, mapR):  # take in a new map reading
-        self.mapTrans = mapT  # assume map tranlation and rotation are base truth
-        self.mapRot = mapR
-        self.resetOdom(self.odomTrans, self.odomRot)  # set odometry offsets back to 0
+        4
+        #self.mapTrans = mapT  # assume map tranlation and rotation are base truth
+        #self.mapRot = mapR
+        #self.resetOdom(self.odomTrans, self.odomRot)  # set odometry offsets back to 0
     def addMapRotationOffset(self, offset):  # just offset the current reading
         self.mapRot += offset
     # HEY!  This is the important interface for reading out values.
@@ -38,14 +40,14 @@ class RobotPosition:
         return self.mapRot+self.odomRot
     # returns the vector going forward out of the robot
     def forwardVector(self):
-        return polarToCartesian(1.0, self.theta())
+        return polarToCartesian(1.0, self.theta() + pi/2.0)
 
     def origin(self):
         x = self.mapTrans[0]+self.odomTrans[0]
         y = self.mapTrans[1]+self.odomTrans[1]
-        return [x,y]
+        return [x, y]
     def logPosInfo(self):
-        rospy.loginfo("Odometry: (%0.2f, %0.2f) at %0.2f degrees", self.trans[0], self.trans[1], self.rot)
+        rospy.loginfo("Odometry: (%0.2f, %0.2f) at xxx degrees", self.odomTrans[0], self.odomTrans[1])
 
 
 # assuming the laser is 180 degrees, returns what angle the ith laser reading is
@@ -76,16 +78,16 @@ class LaserInterpreter:
 
     def findWallsAndUpdateGlobalCompass(self,reading):
         # do nothing heren
-        rospy.loginfo('TODO find walls and update the global compass')  
+        #rospy.loginfo('TODO find walls and update the global compass')
+        4 + 4
 
     # this is what the update loop calls in LaserInterpreter.  From here we update
     # the global position
     def laserReadingNew(self, reading):
-        rospy.loginfo('Laser reading received...')  
         # Do some processing on the new laser reading
         self.latestreading = reading
         # update the global compass!
-        self.findWallsAndUpdateGlobalCompas(reading)
+        self.findWallsAndUpdateGlobalCompass(reading)
 
     # casts a vector from the origin of the robot's laser.  We basically find
     # the angle and then call castRayPolar

@@ -66,7 +66,9 @@ def vector_angle_general(v, w):
 def vector_angle_signed(v, w):
     #return math.atan2(w[1] - v[1], w[0] - v[0])
     
-    ang = atan2(v[1],v[0]) -     atan2(w[1],w[0])
+    ang = math.atan2(v[1],v[0]) - math.atan2(w[1],w[0])
+    if ang > math.pi:
+        ang = 2.0 * math.pi - ang
     # we are in a right-handed system so return the opposite sign
     return ang * -1.0
 

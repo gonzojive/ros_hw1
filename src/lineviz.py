@@ -19,12 +19,15 @@ POINT_WIDTH = .04
 class LocalMapVisualizer:
     def __init__(self):
         self.pub = rospy.Publisher("visualization_marker", Marker)
-        self.idCounter = 0
-    def vizSegment(self, start, end):
+        self.idCounter = 100
+    def vizSegment(self, start, end, the_id=None):
         marker = Marker()
         marker.header.frame_id = "/base_laser";
         marker.ns = "basic_shapes";
-        marker.id = self.idCounter;
+        if the_id:
+            marker.id = the_id
+        else:
+            marker.id = self.idCounter;
         self.idCounter = self.idCounter + 1
         marker.type = Marker.LINE_LIST;
         marker.action = Marker.ADD;
@@ -38,18 +41,34 @@ class LocalMapVisualizer:
         marker.scale.x = LINE_WIDTH;
         marker.scale.y = LINE_WIDTH;
         marker.scale.z = LINE_WIDTH;
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-        marker.color.a = 1.0;
-        marker.lifetime.secs = .200
+        if the_id == 1:
+            marker.color.r = 1.0;
+            marker.color.g = 0.0;
+            marker.color.b = 0.0;
+            marker.color.a = 1.0;
+        elif the_id == 2:
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 1.0;
+            marker.color.a = 1.0;
+        else:
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+            marker.color.a = 1.0;
+        
+        marker.lifetime.secs = .100
         marker.points = map (lambda pt : Point(x = pt[0], y = pt[1]), [start, end])
         self.pub.publish(marker)
-    def vizPoints(self, points):
+
+    def vizPoints(self, points, the_id=None):
         marker = Marker()
         marker.header.frame_id = "/base_laser";
         marker.ns = "basic_shapes";
-        marker.id = self.idCounter;
+        if the_id:
+            marker.id = the_id
+        else:
+            marker.id = self.idCounter;
         self.idCounter = self.idCounter + 1
         marker.type = Marker.POINTS;
         marker.action = Marker.ADD;
@@ -67,7 +86,7 @@ class LocalMapVisualizer:
         marker.color.g = .40;
         marker.color.b = 0.0;
         marker.color.a = 1.0;
-        marker.lifetime.secs = .200
+        marker.lifetime.secs = 700.100
         marker.points = map (lambda pt : Point(x = pt[0], y = pt[1]), points)
         self.pub.publish(marker)
 

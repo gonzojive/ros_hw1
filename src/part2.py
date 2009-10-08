@@ -9,6 +9,7 @@ from vector import *
 from lineviz import *
 from robotPosition import *
 from move import *
+from compass import *
 
 # import cv	# doesn't recognize cv
 from sensor_msgs.msg import LaserScan
@@ -35,6 +36,9 @@ class Part2:
     def odoListener(self):
         return self._odoListener
 
+    def moveToGoalAgent(self):
+        return self._moveToGoal
+
     def initSubscriptions(self):
         # subscribe to laser readings
         def laserCallback(reading):
@@ -50,6 +54,7 @@ class Part2:
     # perform an update when we receive new info from the odometer or whatever
     def update(self, trans, rot):
         self.robotPosition().odomReadingNew(trans, rot)
+        self.moveToGoalAgent().publishNextMovement()
         
     def initNode(self):
         rospy.init_node('kludge1_2')
@@ -68,6 +73,8 @@ class Part2:
                 continue
         
         self.robotPosition().resetOdom(trans, rot)
+
+        self.moveToGoalAgent().setGoal([4.0, 1.0])
 
         # while we are not shutdown by the ROS, keep updating
         while not rospy.is_shutdown():

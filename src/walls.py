@@ -14,7 +14,7 @@ class Wall:
         self.points = points
 
 
-    def isSameWall(self, otherWall, maxAngle = math.pi / 50.0):
+    def isSameWall(self, otherWall, maxAngle = d2r(10.0)):
         ang = normalizeAngle90(self.line.angleBetween(otherWall.line))
         if ang  <= maxAngle:
             return True
