@@ -57,7 +57,7 @@ class MoveToGoal:
         [[x,y], theta] = self.rp.position()
         x = y = 0
         v = w = 0
-        dt = 2.5
+        dt = 1.5
         grid = self.occGrid
         [xvel, thetavel] = findBestNewVelocities(x, y, theta, v, w, dt, grid, self.vectorToGoal())
         rospy.loginfo("VtoGoal: (%0.2f, %0.2f)", self.vectorToGoal()[0], self.vectorToGoal()[1])
@@ -246,7 +246,7 @@ def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
 #   Calculates a cost estimate of each new v and w value within a reasonable range
 def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
       maxAccel = 0.2 * dt  # 0.5 was pretty much randomly chosen
-      maxAngularAccel = math.pi / 2.0 * dt
+      maxAngularAccel = math.pi / 3.0 * dt
       numIntervals = 10  # 20 x 20 sample grid = 400 test points
       minCost = 10000
       threshold = None  # no threshold to start
@@ -266,6 +266,7 @@ def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
               if costs[0] < minCost:  # store the best cost yet found
                   minCost = costs[0]
                   bestVals = [newV, newW]
+                  rospy.loginfo("BETTER (%0.2f, %0.2f) obj: %0.2f  goal: %0.2f  speed: %0.2f  total: %0.2f  xvel: %0.2f  thetavel: %0.2f", newX, newY, costs[1], costs[2], costs[3], costs[0], bestVals[0], bestVals[1])
                   if threshold and cost < threshold:  # optionally, provide a threshold to stop at
                       return bestVals
               newW += 2*maxAngularAccel/numIntervals  # increment angular velocity
@@ -285,18 +286,22 @@ def calculateCost(oldX, oldY, x, y, v, g, goal, name=None):
     speed = v
     goalDistance = vector_length(vector_minus(goal, [x,y]))
 
-    ocost = obsCoefficient*obsDistance
+    ocost = obsCoefficient*(2.0 - obsDistance)
     gcost = goalCoefficient*goalDistance
     scost = speedCoefficient*speed
 
-    if goalDistance < .4:
+    if goalDistance < .5:
         scost = 0 # speed shall not contribute to the cost when we are really close to the goal
+
+    if obsDistance < 0.55:  # too close to an obstacle -- invalidate this option
+       ocost = 100.0  # will make the cost very large
+
+    #if obsDistance < 1.0:  # too close to an obstacle -- invalidate this option
+        #ocost += (1.0 - obsDistance)   # will make the cost very large
     
     cost =  ocost + gcost +  scost
 
-    if obsDistance < 0.35:  # too close to an obstacle -- invalidate this option
-       cost += 10.0  # will make the cost very large
-    
+   
     if not name:
         name = "%i %i" % (int(math.floor(x*3)), int(math.floor(y*3)))
     name = "cost %s" % name
@@ -312,8 +317,8 @@ class OccupancyGridCell:
 class OccupancyGrid:
     def __init__(self, li, viz):
         self.li = li # laser interpreter
-        self.minFloat = -2.0
-        self.maxFloat = 2.1
+        self.minFloat = -1.2
+        self.maxFloat = 1.26
         self.bucketsPerDimension = 10
         self.viz = viz
         self.grid = [OccupancyGridCell() for x in range(0, self.bucketsPerDimension * self.bucketsPerDimension)]
