@@ -45,6 +45,15 @@ class MoveToGoal:
 
     def publishNextVelocityAvoidingObstaclesOccGrid(self):
         self.occGrid.updateGrid()
+        [[x,y], theta] = self.rp.position()
+        v = w = 0
+        dt = 1.5
+        grid = self.occGrid
+        goal = self.goal
+        [xvel, thetavel] = findBestNewVelocities(x, y, theta, v, w, dt, grid, goal)
+        rospy.loginfo("VtoGoal: (%0.2f, %0.2f)", self.vectorToGoal()[0], self.vectorToGoal()[1])
+        self.velPublish.publish( Twist(Vector3(xvel, 0, 0),Vector3(0, 0, thetavel)) )
+
     def publishNextVelocityAvoidingObstacles(self):
         # figure out which way the goal is
         vToGoal = self.vectorToGoal()
@@ -227,30 +236,40 @@ def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
       minCost = 10000
       threshold = None  # no threshold to start
       bestVals = [0,0]
-      for newV in arange(v-maxAccel, v+maxAccel, 2*maxAccel/numIntervals):
-          for newW in arange(w-maxAngularAccel, w+maxAngularAccel, 2*maxAngularAccel/numIntervals):
+      newV = v - maxAccel  # initialize forward velocity
+      while newV <= v+maxAccel:  # loop over all forward solutions
+          newW = w - maxAngularAccel  # initialize angular velocity
+          while newW <= w+maxAngularAccel:  # loop over all angular solutions
               newTheta = theta + newW*dt  # calculate theta after dt
               halfwayTheta = (newTheta + theta)/2.0  # find the halfway theta
               newX = x + newV*cos(halfwayTheta)*dt  # estimate the x position after dt
               newY = y + newV*sin(halfwayTheta)*dt  # estimate the y position after dt
-              cost = calculateCost(newX, newY, newV, g, goal)  # calculate the cost of this position
-              if cost < minCost:  # store the best cost yet found
-                  minCost = cost
+#              rospy.loginfo("xVel = %0.2f     thetaVel = %0.2f", newV, newW)
+              costs = calculateCost(x, y, newX, newY, newV, g, goal)  # calculate the cost of this position
+              if costs[0] < minCost:  # store the best cost yet found
+                  minCost = costs[0]
                   bestVals = [newV, newW]
                   if threshold and cost < threshold:  # optionally, provide a threshold to stop at
                       return bestVals
+              newW += 2*maxAngularAccel/numIntervals  # increment angular velocity
+          newV += 2*maxAccel/numIntervals  # increment forward velocity
+      rospy.loginfo("obj: %0.2f  goal: %0.2f  speed: %0.2f  total: %0.2f  xvel: %0.2f  thetavel: %0.2f", costs[1], costs[2], costs[3], costs[0], bestVals[0], bestVals[1])
       return bestVals
 
 # calculateCost:
 #   Estimates the cost of a given (x,y,v) state on an occupancy grid g
-def calculateCost(x, y, v, g, goal):
-    obsCoefficient = 2.0  # Assign some multipliers for the costs
+def calculateCost(oldX, oldY, x, y, v, g, goal):
+    obsCoefficient = -2.0  # Assign some multipliers for the costs
     goalCoefficient = 3.0
-    speedCoefficient = 1.0
-    obsCost = g.distToNearestObstacle(x, y)
-    goalCost = (goal[0] - x) + (goal[1] - y)
-    speedCost = 1.0 / v
-    return obsCoefficient*obsCost + goalCoefficient*goalCost + speedCoefficient*speedCost
+    speedCoefficient = -1.0
+    obsCost = g.distToNearestObstacle(x-oldX, y-oldY)
+    if obsCost < 0.2:  # too close to an obstacle -- invalidate this option
+      obsCost = -100  # will make the cost very large
+    goalCost = abs(goal[0] - x) + abs(goal[1] - y)
+    speedCost = v
+    cost = obsCoefficient*obsCost + goalCoefficient*goalCost + speedCoefficient*speedCost
+#    rospy.loginfo("(%0.2f, %0.2f)  obs = %0.2f  goal = %0.2f  speed = %0.2f  total = %0.2f", x, y, obsCost, goalCost, speedCost, cost)
+    return [cost, obsCoefficient*obsCost, goalCoefficient*goalCost, speedCoefficient*speedCost]
 
 class OccupancyGrid:
     def __init__(self, li):
@@ -292,7 +311,7 @@ class OccupancyGrid:
             fX = float(iX) + step * .5 + self.minFloat
             for iY in range(0, self.bucketsPerDimension):
                 fY = float(iY) + step * .5 + self.minFloat
-                if fY > 0 and True:
+                if fX > 0:
                     vec = [fX, fY]
                     cast_distance = self.li.castVector(vec)
                     # 0 weight for 
@@ -305,8 +324,27 @@ class OccupancyGrid:
     #   An occupancy grid function - probably want this in the class
     #   Does an inefficient search for the nearest obstance in the grid
     def distToNearestObstacle(self, startX, startY):
+        step = self.calculateSpacing()
+        minDist = 4.0
+        for iX in range(0, self.bucketsPerDimension):
+            fX = float(iX) + step * .5 + self.minFloat
+            for iY in range(0, self.bucketsPerDimension):
+                fY = float(iY) + step * .5 + self.minFloat
+                if fX > 0:
+                    vec = [fX, fY]
+                    if self.getGridValue(vec) < 0.1:
+                        dist = abs(vec[0]-startX) + abs(vec[1]-startY)
+                        if dist < minDist:
+                            minDist = dist
+        return minDist
+
+    # distToNearestObstacle:
+    #   An occupancy grid function - probably want this in the class
+    #   Does an inefficient search for the nearest obstance in the grid
+    #   Breaks after travelling a half meter or so
+    def distToNearestObstacleBad(self, startX, startY):
         queue = [ [startX, startY] ]
-        checked = { [startX, startY] : True }
+        checked = { str(startX) + str(startY) : True }
         spacing = [self.calculateSpacing(), self.calculateSpacing()]  # SYNTAX CHECK: needs the cell spacing
         while len(queue) > 0:
             [x, y] = queue.pop(0)
@@ -316,6 +354,6 @@ class OccupancyGrid:
 
             for i in [-spacing[0], spacing[0]]:  # spread out from the current cell
                 for j in [-spacing[1], spacing[1]]:
-                    if not [x+i, y+j] in checked:  # check if this cell is in the dictionary
-                        queue.append[x+i, y+j]
-                        checked[ [x+i, y+j] ]= True
+                    if not (str(x+i) + str(y+j)) in checked:  # check if this cell is in the dictionary
+                        queue.append([x+i, y+j])
+                        checked[ str(x+i) + str(y+j) ]= True
