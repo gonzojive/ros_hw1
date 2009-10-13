@@ -3,7 +3,7 @@ import vector
 import ransac
 from ransac import *
 from vector import *
-
+from util import *
 FP_TOLERANCE = .000001
 
 # an infinite line
