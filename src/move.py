@@ -44,6 +44,14 @@ class MoveToGoal:
         return .5 # half a meter per second
 
     def publishNextVelocityAvoidingObstaclesOccGrid(self):
+        
+        rotated_vToGoal = vector_rotate_2d( self.vectorToGoal(), -1.0 * self.rp.theta())
+        #rotated_vForward = vector_rotate_2d( vForward, -1.0 * self.rp.theta())
+        rospy.loginfo("theta in degrees: %0.2f", r2d(self.rp.theta()))
+        self.viz.vizSegment([0,0,0], rotated_vToGoal, name="rotated_vToGoal", color=[1.0,0.0,0.0])
+        self.viz.vizSegment([0,0,0], self.vectorToGoal(), name="vToGoal", color=[0.0,0.0,1.0])
+        #self.viz.vizSegment([0,0,0], rotated_vForward, name="vForward")
+        
         self.occGrid.updateGrid()
         [[x,y], theta] = self.rp.position()
         v = w = 0
@@ -57,6 +65,13 @@ class MoveToGoal:
     def publishNextVelocityAvoidingObstacles(self):
         # figure out which way the goal is
         vToGoal = self.vectorToGoal()
+
+        rotated_vToGoal = vector_rotate_2d( vToGoal, -1.0 * self.rp.theta())
+        #rotated_vForward = vector_rotate_2d( vForward, -1.0 * self.rp.theta())
+        rospy.loginfo("Visualizing segments: [%0.2f, %0.2f]", rotated_vToGoal[0], rotated_vToGoal[1])
+        self.viz.vizSegment([0,0,0], rotated_vToGoal, name="vToGoal")
+        #self.viz.vizSegment([0,0,0], rotated_vForward, name="vForward")
+
         # now figure out how fast we want to go
         vToGoal = vector_scale(vector_normalize(vToGoal), self.maxLinearVelocity())
         goalAngle = vector_angle_general([0,-1], vToGoal)
@@ -177,8 +192,13 @@ class MoveToGoal:
         vToGoal = vector_minus(self.goal, vOrigin)
 
         #self.viz.vizPoints([vToGoal])
-        self.viz.vizSegment([0,0,0], vToGoal, the_id=1)
-        self.viz.vizSegment([0,0,0], vForward, the_id=2)
+        rotated_vToGoal = vector_rotate_2d( vToGoal, -1.0 * self.rp.theta())
+        rotated_vForward = vector_rotate_2d( vForward, -1.0 * self.rp.theta())
+        #self.viz.vizSegment([0,0,0], vToGoal, name="vToGoal")
+        #self.viz.vizSegment([0,0,0], vForward, name="vForward")
+        rospy.loginfo("Visualizing segments: [%0.2f, %0.2f]", rotated_vToGoal[0], rotated_vToGoal[1])
+        self.viz.vizSegment([0,0,0], rotated_vToGoal, name="vToGoal")
+        self.viz.vizSegment([0,0,0], rotated_vForward, name="vForward")
         
         # determine the angle between the the forward vector and the v
         signedAngleToGoal = vector_angle_signed(vForward, vToGoal)

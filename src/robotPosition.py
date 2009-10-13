@@ -21,9 +21,11 @@ class RobotPosition:
         self.mapRot = 0
     def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
         self.odomTrans0 = t
+        
         self.odomRot0 = math.acos(r[3])*2.0 # set the original rotation
         rospy.loginfo("Original ODOM: (%0.2f, %0.2f) at %0.2f degrees", self.odomTrans0[0], self.odomTrans0[1], self.odomRot0)
     def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
+        rospy.loginfo("ODOM Quaternion: (%0.2f, %0.2f, %0.2f, %0.2f) ", r[0], r[1], r[2], r[3])
         self.odomTrans[0] = t[0] - self.odomTrans0[0]
         self.odomTrans[1] = t[1] - self.odomTrans0[1]
         self.odomRot = (math.acos(r[3])*2.0 - self.odomRot0)
