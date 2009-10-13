@@ -8,9 +8,11 @@ from vector import *
 from lineviz import *
 from robotPosition import *
 
+viz = None
 
 class MoveToGoal:
     def __init__(self, robotPosition, laserInterpreter):
+        global viz
         self.xGoal = 4  # 4m
         self.thetaGoal = 180  # 180 degrees
         self.rp = robotPosition  # the RobotPosition
@@ -19,7 +21,7 @@ class MoveToGoal:
         self.stage = 1 # go through 4 stages: 1. go fwd 10 feet. 2. turn around. 3.
         self.viz = LocalMapVisualizer()
         self.occGrid = OccupancyGrid(self.li, self.viz)
-
+        viz = self.viz
     def setGoal(self, goalXY):
         self.goal = goalXY
         self.paintGoal()
@@ -54,10 +56,11 @@ class MoveToGoal:
         
         self.occGrid.updateGrid()
         [[x,y], theta] = self.rp.position()
+        x = y = 0
         v = w = 0
-        dt = 1.5
+        dt = 2.5
         grid = self.occGrid
-        goal = self.goal
+        goal = self.vectorToGoal()
         [xvel, thetavel] = findBestNewVelocities(x, y, theta, v, w, dt, grid, goal)
         rospy.loginfo("VtoGoal: (%0.2f, %0.2f)", self.vectorToGoal()[0], self.vectorToGoal()[1])
         self.velPublish.publish( Twist(Vector3(xvel, 0, 0),Vector3(0, 0, thetavel)) )
@@ -250,13 +253,14 @@ def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
 #   Takes in current x, y, theta, velocity v, angular velocity w, timestep dt, grid g
 #   Calculates a cost estimate of each new v and w value within a reasonable range
 def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
-      maxAccel = 0.5 * dt  # 0.5 was pretty much randomly chosen
-      maxAngularAccel = 0.5 * dt
-      numIntervals = 20  # 20 x 20 sample grid = 400 test points
+      maxAccel = 0.2 * dt  # 0.5 was pretty much randomly chosen
+      maxAngularAccel = math.pi / 2.0 * dt
+      numIntervals = 10  # 20 x 20 sample grid = 400 test points
       minCost = 10000
       threshold = None  # no threshold to start
       bestVals = [0,0]
       newV = v - maxAccel  # initialize forward velocity
+      attemptCount = 0
       while newV <= v+maxAccel:  # loop over all forward solutions
           newW = w - maxAngularAccel  # initialize angular velocity
           while newW <= w+maxAngularAccel:  # loop over all angular solutions
@@ -264,8 +268,9 @@ def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
               halfwayTheta = (newTheta + theta)/2.0  # find the halfway theta
               newX = x + newV*cos(halfwayTheta)*dt  # estimate the x position after dt
               newY = y + newV*sin(halfwayTheta)*dt  # estimate the y position after dt
-#              rospy.loginfo("xVel = %0.2f     thetaVel = %0.2f", newV, newW)
-              costs = calculateCost(x, y, newX, newY, newV, g, goal)  # calculate the cost of this position
+              #rospy.loginfo("xVel = %0.2f     thetaVel = %0.2f", newV, newW)
+              attemptCount = attemptCount + 1
+              costs = calculateCost(x, y, newX, newY, newV, g, goal, name=attemptCount)  # calculate the cost of this position
               if costs[0] < minCost:  # store the best cost yet found
                   minCost = costs[0]
                   bestVals = [newV, newW]
@@ -278,17 +283,22 @@ def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
 
 # calculateCost:
 #   Estimates the cost of a given (x,y,v) state on an occupancy grid g
-def calculateCost(oldX, oldY, x, y, v, g, goal):
+def calculateCost(oldX, oldY, x, y, v, g, goal, name=None):
     obsCoefficient = -2.0  # Assign some multipliers for the costs
     goalCoefficient = 3.0
     speedCoefficient = -1.0
-    obsCost = g.distToNearestObstacle(x-oldX, y-oldY)
-    if obsCost < 0.2:  # too close to an obstacle -- invalidate this option
+    #obsCost = g.distToNearestObstacle(x-oldX, y-oldY)
+    obsCost = g.distToNearestObstacle(x, y)
+    if obsCost < 0.7:  # too close to an obstacle -- invalidate this option
       obsCost = -100  # will make the cost very large
-    goalCost = abs(goal[0] - x) + abs(goal[1] - y)
+    goalCost = vector_length(goal)
     speedCost = v
     cost = obsCoefficient*obsCost + goalCoefficient*goalCost + speedCoefficient*speedCost
-#    rospy.loginfo("(%0.2f, %0.2f)  obs = %0.2f  goal = %0.2f  speed = %0.2f  total = %0.2f", x, y, obsCost, goalCost, speedCost, cost)
+    if not name:
+        name = "%i %i" % (int(math.floor(x*3)), int(math.floor(y*3)))
+    name = "cost %s" % name
+    viz.vizSegment([x, y, 0.0], [x, y, cost / 6.0 + .1 ], name=name)#, color=(1.0, 0.0, 0.0))
+    rospy.loginfo("(%0.2f, %0.2f)  obs = %0.2f  goal = %0.2f  speed = %0.2f  total = %0.2f", x, y, obsCost, goalCost, speedCost, cost)
     return [cost, obsCoefficient*obsCost, goalCoefficient*goalCost, speedCoefficient*speedCost]
 
 class OccupancyGridCell:
@@ -352,7 +362,7 @@ class OccupancyGrid:
         for [fX, fY, iX, iY] in self.bucketCenters():
             gridCell = self.getGridValue([fX, fY])
             gridVal = gridCell.distanceToObstacle
-            #rospy.loginfo("viz grid [%0.2f, %0.2f] => %0.2f", fX, fY, gridCell.distanceToObstacle)
+            rospy.loginfo("viz grid [%0.2f, %0.2f] => %0.2f", fX, fY, gridCell.distanceToObstacle)
             self.viz.vizSegment([fX,fY,0.0], [fX,fY,gridVal * .2 ], name="forward %i %i" % (iX, iY))
         
 
