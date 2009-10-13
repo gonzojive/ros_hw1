@@ -9,6 +9,7 @@ import geometry_msgs.msg
 import roslib.msg
 import std_msgs.msg
 import random
+from vector import *
 
 from visualization_msgs.msg import *
 from geometry_msgs.msg import *
@@ -82,7 +83,8 @@ class LocalMapVisualizer:
 
     def vizSegment(self, start, end, name=None, color=None):
         marker = self.makeMarker(type=Marker.LINE_LIST, name=name, color=color)
-        marker.points = map (lambda pt : Point(x = pt[0], y = pt[1]), [start, end])        
+        marker.points = map (lambda pt : Point(x = pt[0], y = pt[1], z = pt[2]),
+                             [vector3d(start), vector3d(end)])        
         self.pub.publish(marker)
 
     def vizPoints(self, points, the_id=None):

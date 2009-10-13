@@ -1,5 +1,12 @@
 import math
 
+def vector3d(v):
+    if len(v) == 2:
+        return [v[0], v[1], 0.0]
+    else:
+        return v
+    
+
 def cross3d(v, w):
     x = v[1]*w[2] - v[2]*w[1]
     y = v[2]*w[0] - v[0]*w[2]
@@ -83,6 +90,7 @@ def vector_angle_signed(v, w):
     #     angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));
     #3angleyz = sign(dot(x,c))*atan2(norm(c),dot(y,z));
 
+# rotates the vector theta degrees counterclockwise about the positive z axis
 def vector_rotate_2d(v, theta_about_z):
     theta = theta_about_z
     [x, y] = v

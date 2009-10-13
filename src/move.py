@@ -18,7 +18,7 @@ class MoveToGoal:
         self.velPublish = rospy.Publisher("commands", Twist) # publish to "commands"
         self.stage = 1 # go through 4 stages: 1. go fwd 10 feet. 2. turn around. 3.
         self.viz = LocalMapVisualizer()
-        self.occGrid = OccupancyGrid(self.li)
+        self.occGrid = OccupancyGrid(self.li, self.viz)
 
     def setGoal(self, goalXY):
         self.goal = goalXY
@@ -27,15 +27,14 @@ class MoveToGoal:
     def paintGoal(self):
         vOrigin = self.rp.origin()
         # figure out the vector to the goal
-        vToGoal = vector_minus(self.goal, vOrigin)
+        vToGoal = self.vectorToGoal()
 
         self.viz.vizPoints([vToGoal])
 
     # returns the vector from the robot to the goal
     def vectorToGoal(self):
-        vOrigin = self.rp.origin()
-        vToGoal = vector_minus(self.goal, vOrigin)
-        return vToGoal
+        # vOrigin and vToGoal are in global coordinates
+        return self.rp.globalToLocal(self.goal)
 
     def robotRadius(self):
         return .2 # 1.5 feet sounds not too bad for the width
@@ -48,8 +47,9 @@ class MoveToGoal:
         rotated_vToGoal = vector_rotate_2d( self.vectorToGoal(), -1.0 * self.rp.theta())
         #rotated_vForward = vector_rotate_2d( vForward, -1.0 * self.rp.theta())
         rospy.loginfo("theta in degrees: %0.2f", r2d(self.rp.theta()))
-        self.viz.vizSegment([0,0,0], rotated_vToGoal, name="rotated_vToGoal", color=[1.0,0.0,0.0])
-        self.viz.vizSegment([0,0,0], self.vectorToGoal(), name="vToGoal", color=[0.0,0.0,1.0])
+        self.viz.vizSegment([0.0,0.0,0.0], [1.0,0.0,0.0], name="forward", color=[1.0, 1.0, 1.0])
+        self.viz.vizSegment([0,0.0,0.0], rotated_vToGoal, name="rotated_vToGoal", color=[1.0,0.0,0.0])
+        self.viz.vizSegment([0.0,0.0,0.0], self.vectorToGoal(), name="vToGoal", color=[0.0,0.0,1.0])
         #self.viz.vizSegment([0,0,0], rotated_vForward, name="vForward")
         
         self.occGrid.updateGrid()
@@ -291,13 +291,20 @@ def calculateCost(oldX, oldY, x, y, v, g, goal):
 #    rospy.loginfo("(%0.2f, %0.2f)  obs = %0.2f  goal = %0.2f  speed = %0.2f  total = %0.2f", x, y, obsCost, goalCost, speedCost, cost)
     return [cost, obsCoefficient*obsCost, goalCoefficient*goalCost, speedCoefficient*speedCost]
 
+class OccupancyGridCell:
+    def __init__(self):
+        self.distanceToObstacle = 0.0
+        self.collidesWithObstacle = None
+        
 class OccupancyGrid:
-    def __init__(self, li):
+    def __init__(self, li, viz):
         self.li = li # laser interpreter
-        self.minFloat = -2
-        self.maxFloat = 2
+        self.minFloat = -2.0
+        self.maxFloat = 2.1
         self.bucketsPerDimension = 10
-        self.grid = map (lambda x : 1, range(0, self.bucketsPerDimension * self.bucketsPerDimension))
+        self.viz = viz
+        self.grid = [OccupancyGridCell() for x in range(0, self.bucketsPerDimension * self.bucketsPerDimension)]
+        self._bucketCenters = None
 
     #givena  tuple containing floats, returns the value in the occupancy grid 
     def getGridValue(self, point):
@@ -314,6 +321,20 @@ class OccupancyGrid:
     def getBucketValue(self, x, y):
         return self.grid[x * self.bucketsPerDimension + y]
 
+    def bucketCenters(self):
+        if not self._bucketCenters:
+            self._bucketCenters = [x for x in self.computeBucketCenters()]
+        return self._bucketCenters
+
+    def computeBucketCenters(self):
+        step = self.calculateSpacing()
+        for iX in range(0, self.bucketsPerDimension):
+            fX = float(iX) * step + self.minFloat
+            for iY in range(0, self.bucketsPerDimension):
+                fY = float(iY) * step + self.minFloat
+                if fX > 0:
+                    yield [fX, fY, iX, iY]
+                    
     def pointToBucketXY(self, pt):
         [x, y] = pt
         # if we are looking for -2 1 in a grid, we would return 
@@ -324,38 +345,66 @@ class OccupancyGrid:
     def calculateSpacing(self):
         return float(self.maxFloat - self.minFloat) / float(self.bucketsPerDimension)
 
+    # vizualizes the occupancy griz via rviz.  creates a line segment from the ground up
+    # where the z is determined by the distance to the nearest obstacle
+    def vizGrid(self):
+        rospy.loginfo("grid spacing => %0.2f", self.calculateSpacing())
+        for [fX, fY, iX, iY] in self.bucketCenters():
+            gridCell = self.getGridValue([fX, fY])
+            gridVal = gridCell.distanceToObstacle
+            #rospy.loginfo("viz grid [%0.2f, %0.2f] => %0.2f", fX, fY, gridCell.distanceToObstacle)
+            self.viz.vizSegment([fX,fY,0.0], [fX,fY,gridVal * .2 ], name="forward %i %i" % (iX, iY))
+        
+
     # update the grid with the laser scan info
     def updateGrid(self):
-        step = self.calculateSpacing()
-        for iX in range(0, self.bucketsPerDimension):
-            fX = float(iX) + step * .5 + self.minFloat
-            for iY in range(0, self.bucketsPerDimension):
-                fY = float(iY) + step * .5 + self.minFloat
-                if fX > 0:
-                    vec = [fX, fY]
-                    cast_distance = self.li.castVector(vec)
-                    # 0 weight for 
-                    gridVal = 0.0
-                    if cast_distance * cast_distance > vector_length_squared(vec):
-                        gridVal = 1.0
-                    self.setGridValue(vec, gridVal)
+        for [fX, fY, iX, iY] in self.bucketCenters():
+            if fX > 0:
+                vec = [fX, fY]
+                # decide whether there is something in or before the
+                # grid square by casting a ray in that direction
+                cast_distance = self.li.castVector(vec)
+                fY = -1.0 * fY
+                vec = [fX, fY]
+                distance_to_fXfY_squared = vector_length_squared(vec)
+                # 0 weight for 
+                gridCell = self.getGridValue(vec)
+                obstacle_in_grid_squarep = cast_distance * cast_distance < distance_to_fXfY_squared
+                
+                if obstacle_in_grid_squarep:
+                    gridCell.distanceToObstacle = 0
+                    gridCell.collidesWithObstacle = True
+                else:
+                    gridCell.distanceToObstacle = cast_distance - sqrt(distance_to_fXfY_squared)
+                    gridCell.collidesWithObstacle = False
+                #self.setGridValue(vec, cast_distance - sqrt(distance_to_fXfY_squared))
+        for [fX, fY, iX, iY] in self.bucketCenters():
+            dist = self.computeDistToNearestObstacle(fX, fY)
+            gridCell = self.getGridValue([fX, fY])
+            gridCell.distanceToObstacle = dist
+
+        self.vizGrid()
 
     # distToNearestObstacle:
     #   An occupancy grid function - probably want this in the class
     #   Does an inefficient search for the nearest obstance in the grid
     def distToNearestObstacle(self, startX, startY):
+        return self.computeDistToNearestObstacle(startX, startY)
+        gridCell = self.getGridValue([startX, startY])
+        return gridCell.distanceToObstacle
+
+    
+    def computeDistToNearestObstacle(self, startX, startY):
         step = self.calculateSpacing()
         minDist = 4.0
-        for iX in range(0, self.bucketsPerDimension):
-            fX = float(iX) + step * .5 + self.minFloat
-            for iY in range(0, self.bucketsPerDimension):
-                fY = float(iY) + step * .5 + self.minFloat
-                if fX > 0:
-                    vec = [fX, fY]
-                    if self.getGridValue(vec) < 0.1:
-                        dist = abs(vec[0]-startX) + abs(vec[1]-startY)
-                        if dist < minDist:
-                            minDist = dist
+        for [fX, fY, iX, iY] in self.bucketCenters():
+            vec = [fX, fY]
+            gridCell = self.getGridValue(vec)
+            if gridCell.collidesWithObstacle:
+                vToStart = vector_minus([startX, startY], vec)
+                dist = vector_length(vToStart)  #abs(vec[0]-startX) + abs(vec[1]-startY)
+                if dist < minDist:
+                    minDist = dist
         return minDist
 
     # distToNearestObstacle:

@@ -7,6 +7,7 @@ from util import *
 from vector import *
 from lineviz import *
 from walls import *
+from quaternion import *
 
 class RedGlobalCompass:
     def __init__(self):
@@ -21,14 +22,17 @@ class RobotPosition:
         self.mapRot = 0
     def resetOdom(self, t, r):  # resets the odometry offsets to the current odometry value
         self.odomTrans0 = t
+        self.odomTrans =  [0.0, 0.0]
         
-        self.odomRot0 = math.acos(r[3])*2.0 # set the original rotation
+        # incorrect: self.odomRot0 = math.acos(r[3])*2.0 # set the original rotation
+        self.odomRot0 = self.odomRot = quatToAngleAboutPositiveZ(r)
         rospy.loginfo("Original ODOM: (%0.2f, %0.2f) at %0.2f degrees", self.odomTrans0[0], self.odomTrans0[1], self.odomRot0)
     def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
         rospy.loginfo("ODOM Quaternion: (%0.2f, %0.2f, %0.2f, %0.2f) ", r[0], r[1], r[2], r[3])
         self.odomTrans[0] = t[0] - self.odomTrans0[0]
         self.odomTrans[1] = t[1] - self.odomTrans0[1]
-        self.odomRot = (math.acos(r[3])*2.0 - self.odomRot0)
+        self.odomRot = quatToAngleAboutPositiveZ(r)
+        #self.odomRot = (math.acos(r[3])*2.0 - self.odomRot0)
         self.logPosInfo()
     def mapPositionNew(self, mapT, mapR):  # take in a new map reading
         4
@@ -44,10 +48,24 @@ class RobotPosition:
         return [self.origin(), self.theta()]
 
     def theta(self):
-        return self.mapRot+self.odomRot
+        # relativeToOriginalRotation corresponds to the angle since this node started up 
+        relativeToOriginalRotation = normalizeAngle360(self.odomRot - self.odomRot0)
+        relativeToOdometryFrameRotation = normalizeAngle360(self.odomRot)
+        #return relativeToOdometryFrameRotation
+        return relativeToOriginalRotation
+        #return self.mapRot+self.odomRot
     # returns the vector going forward out of the robot
     def forwardVector(self):
         return polarToCartesian(1.0, self.theta() + pi/2.0)
+
+    #    def localToGlobal(self, pt):
+
+    # given some point relative to the robot's position when we first started listening in,
+    # returns a point relative to the current robot position
+    def globalToLocal(self, pt):
+        vToPtGlobal = vector_minus(pt, self.origin())
+        rotated_vToGoal = vector_rotate_2d( vToPtGlobal, 1.0 * self.theta())
+        return rotated_vToGoal
 
     def origin(self):
         x = self.mapTrans[0]+self.odomTrans[0]
@@ -98,9 +116,9 @@ class LaserInterpreter:
     # casts a vector from the origin of the robot's laser.  We basically find
     # the angle and then call castRayPolar
     def castVector(self, vector):
-        angle = normalizeAngle360(vector_angle_general([0,-1],[1,1]))
-        if angle > pi:
-            angle = pi
+        angle = normalizeAngle360(vector_angle_general([0.0,-1.0], vector))
+        if angle > math.pi:
+            angle = math.pi
         return self.castRayPolar(angle)
     # casts a ray in the given polar direction and returns how far away an object is
     # in that direction
