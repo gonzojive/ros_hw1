@@ -11,8 +11,11 @@ def qconjugate(quat):
 def qToAxisAngle(quat):
     (x, y, z, w) = quat
     angle = math.acos(w) * 2.0
-    axis = vector_scale( (x, y, z), 1.0 / math.sin(angle / 2.0))
-    return [ axis, angle ]
+    if angle < .01 and angle > -.01:
+        return [ [0.0, 0.0, 1.0], 0.0]
+    else:
+        axis = vector_scale( (x, y, z), 1.0 / math.sin(angle / 2.0))
+        return [ axis, angle ]
 
 def quatToAngleAboutPositiveZ(quat):
      [ axis, angle ] = qToAxisAngle(quat)

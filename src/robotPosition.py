@@ -28,10 +28,10 @@ class RobotPosition:
         self.odomRot0 = self.odomRot = quatToAngleAboutPositiveZ(r)
         rospy.loginfo("Original ODOM: (%0.2f, %0.2f) at %0.2f degrees", self.odomTrans0[0], self.odomTrans0[1], self.odomRot0)
     def odomReadingNew(self, t, r):  # calculate a new odometry reading with respect to the offsets
-        rospy.loginfo("ODOM Quaternion: (%0.2f, %0.2f, %0.2f, %0.2f) ", r[0], r[1], r[2], r[3])
         self.odomTrans[0] = t[0] - self.odomTrans0[0]
         self.odomTrans[1] = t[1] - self.odomTrans0[1]
         self.odomRot = quatToAngleAboutPositiveZ(r)
+        rospy.loginfo("ODOM Quaternion: (%0.2f, %0.2f, %0.2f, %0.2f) => theta = %0.2f degrees // odomRot = %0.2f", r[0], r[1], r[2], r[3], r2d(self.theta()), r2d(self.odomRot))
         #self.odomRot = (math.acos(r[3])*2.0 - self.odomRot0)
         self.logPosInfo()
     def mapPositionNew(self, mapT, mapR):  # take in a new map reading
@@ -64,7 +64,7 @@ class RobotPosition:
     # returns a point relative to the current robot position
     def globalToLocal(self, pt):
         vToPtGlobal = vector_minus(pt, self.origin())
-        rotated_vToGoal = vector_rotate_2d( vToPtGlobal, 1.0 * self.theta())
+        rotated_vToGoal = vector_rotate_2d( vToPtGlobal, -1.0 * self.theta())
         return rotated_vToGoal
 
     def origin(self):
