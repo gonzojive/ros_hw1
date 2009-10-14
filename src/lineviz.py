@@ -87,6 +87,12 @@ class LocalMapVisualizer:
                              [vector3d(start), vector3d(end)])        
         self.pub.publish(marker)
 
+    def vizSegments(self, points, name=None, color=None):
+        marker = self.makeMarker(type=Marker.LINE_STRIP, name=name, color=color)
+        marker.points = map (lambda pt : Point(x = pt[0], y = pt[1], z = pt[2]),
+                             map(vector3d, points))        
+        self.pub.publish(marker)
+
     def vizPoints(self, points, the_id=None):
         marker = Marker()
         marker.header.frame_id = "/base_laser";
