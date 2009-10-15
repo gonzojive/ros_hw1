@@ -6,4 +6,6 @@
     <param name="base_watchdog_timeout" value="0.2"/>
   </node>
   <node pkg="fake_localization" type="fake_localization" respawn="false" />
+  <node pkg="rviz" type="rviz" args="" respawn="false" />
+  <node pkg="rxtools" type="rxconsole" args="" respawn="false" />
 </launch>
