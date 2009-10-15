@@ -116,7 +116,11 @@ class LaserInterpreter:
     # casts a vector from the origin of the robot's laser.  We basically find
     # the angle and then call castRayPolar
     def castVector(self, vector):
-        angle = normalizeAngle360(vector_angle_general([0.0,-1.0], vector))
+        angle = 0
+        if abs(vector[0]) < .01 and abs(vector[1]) < .01:
+            angle = 0
+        else:
+            angle = normalizeAngle360(vector_angle_general([0.0,-1.0], vector))
         if angle > math.pi:
             angle = math.pi
         return self.castRayPolar(angle)

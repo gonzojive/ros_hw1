@@ -17,6 +17,7 @@ class Trajectory:
     MAX_ACCEL = 0.5
     MAX_ANG_ACCEL = math.pi / 1.6
     SIMULATION_DT = .3
+    SIMULATION_T = 4.0
     # constructs a velocity from provided robot controls (forward velocity and angular velocity)
     #
     # forward velocity is a scalar value in meters per second and is the velocity of the robot in
@@ -30,22 +31,30 @@ class Trajectory:
         self.currentFwdVel = currentFwdVel
         self.currentAngVel = currentAngVel
 
-    def vizTrajectory(self, name=None, color=None):
-        positions = self.simulate(Trajectory.SIMULATION_DT, 2.0)
+    def vizTrajectory(self, name=None, color=None, z=.2):
+        positions = self.simulate(Trajectory.SIMULATION_DT, Trajectory.SIMULATION_T)
         positions = [[0.0,0.0]] + positions
         #displayVectors = map(vector_minus, positions[1:], positions[: len(positions)-1])
-        positions = map(lambda xy: (xy[0], xy[1], .2), positions)
+        positions = map(lambda xy: (xy[0], xy[1], z), positions)
         rospy.loginfo("Visualizing Trajectory (%0.2f, %0.2f): %s", self.fwdVel, self.angVel, positions)
-        viz.vizSegments(positions, name=name)
+        viz.vizSegments(positions, name=name, color=color)
 
     def cost(self, simulationTime, occGrid, goal):
         positions = self.simulate(Trajectory.SIMULATION_DT, simulationTime)
+        gridCellsSeen = {}
         def costAtPosition(xy):
-            return occGrid.obstacleCostAt(xy[0], xy[1])
+            gridCell = occGrid.getGridValue(xy)
+            if gridCell not in gridCellsSeen:
+                gridCellsSeen[gridCell] = True
+                obstCost = occGrid.obstacleCostAt(xy[0], xy[1])
+                denom = float(len(gridCellsSeen))
+                factor = 1.0 / (denom * denom)
+                return factor * obstCost
+            return 0
 
         # average trajectory object collision costs
         allObsCosts = map(costAtPosition, positions)
-        ocost = sum(allObsCosts) / float(len(allObsCosts))
+        ocost = sum(allObsCosts) #/ float(len(allObsCosts))
 
         # calculate distanceToGoal from endpoint of trajectory
         lastPosition = positions[len(positions) - 1]
@@ -54,17 +63,18 @@ class Trajectory:
         # speed cost is inversely proportional to the speed we are going
         scost = -1.0 * vector_dot([self.fwdVel, 0], vector_normalize(goal))
 
-        ocoef = 3.0
-        gcoef = 3.0
-        scoef = 1.0
+        ocoef = 0.25
+        gcoef = 4.0
+        scoef = 2.4
         totalCost = scost * scoef + ocost * ocoef + gcost * gcoef
 
-        rospy.loginfo("all obstacle costs: %s", map(lambda x : "%0.2f" % x, allObsCosts))
-        rospy.loginfo("all positions     : %s", map(lambda x : "(%0.2f, %0.2f)" % (x[0], x[1]), positions))
-        rospy.loginfo("all cost at 0, 0: %s, bucket: %s", occGrid.obstacleCostAt(0.0, 0.0), occGrid.pointToBucketXY([0,0]))
-        #
         rospy.loginfo("Trajectory (%0.2f, %0.2f) Cost: %s / speed: %0.2f / goal: %0.2f / obstac: %0.2f",
                       self.fwdVel, self.angVel, totalCost, scost * scoef, gcost * gcoef, ocost * ocoef)
+
+        #rospy.loginfo("all obstacle costs: %s", map(lambda x : "%0.2f" % x, allObsCosts))
+        #rospy.loginfo("all positions (%0.2f, %0.3f)  : %s", self.fwdVel, self.angVel, map(lambda x : "(%0.2f, %0.2f)" % (x[0], x[1]), positions))
+        #rospy.loginfo("all cost at 0, 0: %s, bucket: %s", occGrid.obstacleCostAt(0.0, 0.0), occGrid.pointToBucketXY([0,0]))
+        #
 
         return totalCost
             
@@ -151,19 +161,28 @@ class MoveToGoal:
         
         #rotated_vForward = vector_rotate_2d( vForward, -1.0 * self.rp.theta())
         rospy.loginfo("theta in degrees: %0.2f", r2d(self.rp.theta()))
-        self.viz.vizSegment([0.0,0.0,0.0], [1.0,0.0,0.0], name="forward", color=[1.0, 1.0, 1.0])
-        self.viz.vizSegment([0.0,0.0,0.0], self.vectorToGoal(), name="vToGoal", color=[0.0,0.0,1.0])
+        vToGoal = self.vectorToGoal()
+        #self.viz.vizSegment([0.0,0.0,0.0], [1.0,0.0,0.0], name="forward", color=[1.0, 1.0, 1.0])
+        self.viz.vizSegment([0.0,0.0,0.0], vToGoal, name="vToGoal", color=[0.0,0.0,1.0])
         #self.viz.vizSegment([0,0,0], rotated_vForward, name="vForward")
 
         # update the occupancy grid
-        self.occGrid.updateGrid(self.vectorToGoal())
+        self.occGrid.updateGrid(vToGoal)
 
-        # find the best trajectory
-        bestTraj = self.findBestTrajectory()
-        bestTraj.vizTrajectory("BestTrajectory", color=(1.0, 0.0, 0.0))
+        distanceToGoal = vector_length(vToGoal)
+        newWVel = 0
+        newXVel = -.1
 
-        newWVel = bestTraj.angVel
-        newXVel = bestTraj.fwdVel
+        if distanceToGoal < .25:
+            newXVel = 0.0
+        else:
+            # find the best trajectory
+            bestTraj = self.findBestTrajectory()
+            if bestTraj:
+                bestTraj.vizTrajectory("BestTrajectory", color=(1.0, 0.0, 0.0), z=.3)
+                
+                newWVel = bestTraj.angVel
+                newXVel = bestTraj.fwdVel
 
         self.velPublish.publish( Twist(Vector3(newXVel, 0, 0),Vector3(0, 0, newWVel)) )
 
@@ -171,7 +190,7 @@ class MoveToGoal:
         bestTraj = None
         bestCost = 1000000
         for traj in self.trajectoryGenerator():
-            c = traj.cost(1.5, self.occGrid, self.goal)
+            c = traj.cost(Trajectory.SIMULATION_T, self.occGrid, self.goal)
             rospy.loginfo("Trajectory (%0.2f, %0.2f) has cost %0.2f", traj.fwdVel, traj.angVel, c)
             if c < bestCost or not bestTraj:
                 bestCost = c
@@ -180,12 +199,12 @@ class MoveToGoal:
         return bestTraj
         
     def trajectoryGenerator(self):
-        minVel = 0.0
-        maxVel = 0.5
-        minAngVel = -pi / 4.0
-        maxAngVel =  pi / 4.0
-        velSteps = 3
-        angSteps = 10
+        minVel = 0.1
+        maxVel = 1.2
+        minAngVel = -pi / 3.0
+        maxAngVel =  pi / 3.0
+        velSteps = 6
+        angSteps = 8
         trajNum = 0
         # derived values
         velStep = (maxVel - minVel) / float(velSteps)
@@ -197,7 +216,7 @@ class MoveToGoal:
                 angVel = float(j) * angVelStep + minAngVel
                 # TODO actually get current angular and fwd velocities
                 traj = Trajectory(fwdVel, angVel, .2, 0)
-                traj.vizTrajectory(name="traj %i" % i)
+                traj.vizTrajectory(name="traj %i" % trajNum)
                 yield traj
         
     # this is called by the main update loop of the program.  It uses the robot global compass
@@ -223,95 +242,9 @@ def mapFloatIntoDiscretizedBucket(f, minFloat, maxFloat, numBuckets):
     else:
         return iBucket
 
-# findBestNewVelocities:
-#   Takes in current x, y, theta, velocity v, angular velocity w, timestep dt, grid g
-#   Calculates a cost estimate of each new v and w value within a reasonable range
-def findBestNewVelocities(x, y, theta, v, w, dt, g, goal):
-      maxAccel = 0.2 * dt  # 0.5 was pretty much randomly chosen
-      maxAngularAccel = math.pi / 5.0 * dt
-      numIntervals = 10  # 20 x 20 sample grid = 400 test points
-      minCost = 10000
-      threshold = None  # no threshold to start
-      bestVals = [0,0]
-      newV = v - maxAccel  # initialize forward velocity
-      attemptCount = 0
-      while newV <= v+maxAccel:  # loop over all forward solutions
-          newW = w - maxAngularAccel  # initialize angular velocity
-          while newW <= w+maxAngularAccel:  # loop over all angular solutions
-              newTheta = theta + newW*dt  # calculate theta after dt
-              halfwayTheta = (newTheta + theta)/2.0  # find the halfway theta
-              newX = x + newV*cos(halfwayTheta)*dt  # estimate the x position after dt
-              newY = y + newV*sin(halfwayTheta)*dt  # estimate the y position after dt
-              #rospy.loginfo("xVel = %0.2f     thetaVel = %0.2f", newV, newW)
-              attemptCount = attemptCount + 1
-              costs = calculateCost(x, y, newX, newY, newV, g, goal, name=attemptCount)  # calculate the cost of this position
-              if costs[0] < minCost:  # store the best cost yet found
-                  minCost = costs[0]
-                  bestVals = [newV, newW]
-                  rospy.loginfo("BETTER (%0.2f, %0.2f) obj: %0.2f  goal: %0.2f  speed: %0.2f  total: %0.2f  xvel: %0.2f  thetavel: %0.2f", newX, newY, costs[1], costs[2], costs[3], costs[0], bestVals[0], bestVals[1])
-                  if threshold and cost < threshold:  # optionally, provide a threshold to stop at
-                      return bestVals
-              newW += 2*maxAngularAccel/numIntervals  # increment angular velocity
-          newV += 2*maxAccel/numIntervals  # increment forward velocity
-      rospy.loginfo("BEST obj: %0.2f  goal: %0.2f  speed: %0.2f  total: %0.2f  xvel: %0.2f  thetavel: %0.2f", costs[1], costs[2], costs[3], costs[0], bestVals[0], bestVals[1])
-      return bestVals
-
-# calculateCost:
-#   Estimates the cost of a given (x,y,v) state on an occupancy grid g
-#   the lower the cost, the more desirable
-def calculateCost(oldX, oldY, x, y, v, g, goal, name=None):
-    # segment the displacement vector into lengths .05 long and
-    def calcObjsCost(vec):
-        ocost = g.distToNearestObstacle(vec[0], vec[1])
-        if ocost < 0.2:  # too close to an obstacle -- invalidate this option
-            ocost = 1000.0  # will make the cost very large
-        return ocost
-        
-    objCosts = [ calcObjsCost([x, y]) ]
-    # check for obstacles along the way  We assume no curvature
-    displacementUnit = vector_normalize([x,y])
-    orig_length_squared = vector_length_squared( [x, y])
-    step = .1
-    displacementLength = step
-    while displacementLength * displacementLength - .001 < orig_length_squared:
-        displacementVec = vector_scale(displacementUnit, displacementLength)
-        displacementLength += step
-        ocost = calcObjsCost(displacementVec)
-        objCosts = objCosts + [ocost]
-
-    # average trajectory object collision costs
-    ocost = sum(objCosts) / float(len(objCosts))
-    
-    obsCoefficient = 3.0  # Assign some multipliers for the costs
-    goalCoefficient = 3.0
-    speedCoefficient = -1.0
-    #obsCost = g.distToNearestObstacle(x-oldX, y-oldY)
-    speed = v
-    goalDistance = vector_length(vector_minus(goal, [x,y]))
-
-    ocost = obsCoefficient * ocost
-    gcost = goalCoefficient*goalDistance
-    scost = speedCoefficient*speed
-
-    if goalDistance < .5:
-        scost = 0 # speed shall not contribute to the cost when we are really close to the goal
-
-    #if obsDistance < 1.0:  # too close to an obstacle -- invalidate this option
-        #ocost += (1.0 - obsDistance)   # will make the cost very large
-    
-    cost =  ocost + gcost +  scost
-
-   
-    if not name:
-        name = "%i %i" % (int(math.floor(x*3)), int(math.floor(y*3)))
-    name = "cost %s" % name
-    viz.vizSegment([x, y, 0.0], [x, y, cost / 60.0 + .03 ], name=name)#, color=(1.0, 0.0, 0.0))
-    rospy.loginfo("(%0.2f, %0.2f)  obs = %0.2f  goal = %0.2f  speed = %0.2f  total = %0.2f", x, y, ocost, goalDistance, speed, cost)
-    return [cost, ocost, gcost, scost]
-
 class OccupancyGridCell:
     def __init__(self):
-        self.distanceToObstacle = 0.0
+        self.distanceToObstacle = 0.3
         self.collidesWithObstacle = None
         self.distanceToGoal = 10.0
         
@@ -322,9 +255,11 @@ class OccupancyGrid:
         self.maxX = 2.5
         self.minY = -2.5
         self.maxY = 2.5
-        self.bucketsPerDimension = 15
+        #self.bucketsPerDimension = 20
+        self.bucketsX = 17
+        self.bucketsY = 14
         self.viz = viz
-        self.grid = [OccupancyGridCell() for x in range(0, self.bucketsPerDimension * self.bucketsPerDimension)]
+        self.grid = [OccupancyGridCell() for x in range(0, self.bucketsX * self.bucketsY)]
         self._bucketCenters = None
         self.goal = [0, 0]
         
@@ -339,10 +274,10 @@ class OccupancyGrid:
 
     
     def setBucketValue(self, x, y, value):
-        self.grid[x * self.bucketsPerDimension + y] = value
+        self.grid[x * self.bucketsY + y] = value
         
     def getBucketValue(self, x, y):
-        return self.grid[x * self.bucketsPerDimension + y]
+        return self.grid[x * self.bucketsY + y]
 
     def bucketCenters(self):
         if not self._bucketCenters:
@@ -352,27 +287,26 @@ class OccupancyGrid:
     def computeBucketCenters(self):
         stepX = self.calculateSpacing(True)
         stepY = self.calculateSpacing(False)
-        for iX in range(0, self.bucketsPerDimension):
+        for iX in range(0, self.bucketsX):
             fX = float(iX) * stepX + self.minX
-            for iY in range(0, self.bucketsPerDimension):
+            for iY in range(0, self.bucketsY):
                 fY = float(iY) * stepY + self.minY
-                if fX > 0:
-                    yield [fX, fY, iX, iY]
+                yield [fX, fY, iX, iY]
 
     # returns integer [iX, iY] of the bucket that corresponds to the given floating point values                    
     def pointToBucketXY(self, pt):
         [x, y] = pt
         # if we are looking for -2 1 in a grid, we would return 
-        xBucket = mapFloatIntoDiscretizedBucket(x, self.minX, self.maxX, self.bucketsPerDimension)
-        yBucket = mapFloatIntoDiscretizedBucket(y, self.minY, self.maxY, self.bucketsPerDimension)
+        xBucket = mapFloatIntoDiscretizedBucket(x, self.minX, self.maxX, self.bucketsX)
+        yBucket = mapFloatIntoDiscretizedBucket(y, self.minY, self.maxY, self.bucketsY)
         return [xBucket, yBucket]
 
     # calculates the spacing in the given dimension (True for X , False for Y)
     def calculateSpacing(self, xdimp):
         if xdimp:
-            return float(self.maxX - self.minX) / float(self.bucketsPerDimension)
+            return float(self.maxX - self.minX) / float(self.bucketsX)
         else:
-            return float(self.maxY - self.minY) / float(self.bucketsPerDimension)
+            return float(self.maxY - self.minY) / float(self.bucketsY)
 
     # vizualizes the occupancy griz via rviz.  creates a line segment from the ground up
     # where the z is determined by the distance to the nearest obstacle
@@ -388,25 +322,24 @@ class OccupancyGrid:
     def updateGridCollisions(self):
         # first update the collidsWithObstacle part of each gridcell using the laser readings
         for [fX, fY, iX, iY] in self.bucketCenters():
-            if fX > 0:
-                vec = [fX, fY]
-                # decide whether there is something in or before the
-                # grid square by casting a ray in that direction
-                cast_distance = self.li.castVector(vec)
-                fY = -1.0 * fY
-                vec = [fX, fY]
-                distance_to_fXfY_squared = vector_length_squared(vec)
-                # 0 weight for 
-                gridCell = self.getGridValue(vec)
-                obstacle_in_grid_squarep = cast_distance * cast_distance < distance_to_fXfY_squared
-                
-                if obstacle_in_grid_squarep:
-                    gridCell.distanceToObstacle = 0
-                    gridCell.collidesWithObstacle = True
-                else:
-                    gridCell.distanceToObstacle = cast_distance - sqrt(distance_to_fXfY_squared)
-                    gridCell.collidesWithObstacle = False
-                #self.setGridValue(vec, cast_distance - sqrt(distance_to_fXfY_squared))
+            vec = [fX, fY]
+            # decide whether there is something in or before the
+            # grid square by casting a ray in that direction
+            cast_distance = self.li.castVector(vec)
+            fY = -1.0 * fY
+            vec = [fX, fY]
+            distance_to_fXfY_squared = vector_length_squared(vec)
+            # 0 weight for 
+            gridCell = self.getGridValue(vec)
+            obstacle_in_grid_squarep = cast_distance * cast_distance < distance_to_fXfY_squared
+            #rospy.loginfo("i [%i, %i] f [%0.2f, %0.2f] cast to => %0.2f", iX, iY, fX, fY, cast_distance)
+            if obstacle_in_grid_squarep:
+                gridCell.distanceToObstacle = 0
+                gridCell.collidesWithObstacle = True
+            else:
+                gridCell.distanceToObstacle = cast_distance - sqrt(distance_to_fXfY_squared)
+                gridCell.collidesWithObstacle = False
+            #self.setGridValue(vec, cast_distance - sqrt(distance_to_fXfY_squared))
 
     def updateGridDistances(self, goal):
         self.goal = goal
@@ -440,7 +373,9 @@ class OccupancyGrid:
 
     def obstacleCostAt(self, x, y):
         obsDist = self.distToNearestObstacle(x, y)
-        ocost = -obsDist
+        denom = obsDist + .001
+        return 1.0 / (denom*denom)
+        ocost = obsDist
         if obsDist < 0.2:  # too close to an obstacle -- invalidate this option
             ocost = 1000.0  # will make the cost very large if we hit an obstacle
         return ocost
